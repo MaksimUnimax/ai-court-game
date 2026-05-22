@@ -219,6 +219,15 @@ button:disabled {
   background: rgba(233, 248, 234, 0.88);
 }
 
+.status-warnings {
+  margin-top: 10px;
+}
+
+.status-warnings ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+
 .participant-grid,
 .card-list,
 .relationship-list,

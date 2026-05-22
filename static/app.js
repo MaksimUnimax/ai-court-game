@@ -114,8 +114,8 @@ function renderValidation(message, isError = false) {
 
 function clearLoadedPackage() {
   closeImageViewer();
-  if (state.loadedImageRegistry && Array.isArray(state.loadedImageRegistry.urls)) {
-    for (const url of state.loadedImageRegistry.urls) {
+  if (state.loadedImageRegistry && Array.isArray(state.loadedImageRegistry.revokeUrls)) {
+    for (const url of state.loadedImageRegistry.revokeUrls) {
       URL.revokeObjectURL(url);
     }
   }
@@ -157,12 +157,22 @@ function isJsonFile(file) {
   return Boolean(file) && (file.type === "application/json" || file.name.toLowerCase().endsWith(".json"));
 }
 
+function isZipFile(file) {
+  return Boolean(file) && (file.type === "application/zip" || file.type === "application/x-zip-compressed" || file.name.toLowerCase().endsWith(".zip"));
+}
+
 function isSupportedImageFile(file) {
   if (!file) {
     return false;
   }
   const name = file.name.toLowerCase();
-  return file.type === "image/png" || file.type === "image/jpeg" || file.type === "image/webp" || /\.(png|jpe?g|webp)$/.test(name);
+  return (
+    file.type === "image/png" ||
+    file.type === "image/jpeg" ||
+    file.type === "image/webp" ||
+    file.type === "image/svg+xml" ||
+    /\.(png|jpe?g|webp|svg)$/.test(name)
+  );
 }
 
 function basenameFromPath(value) {
@@ -172,16 +182,51 @@ function basenameFromPath(value) {
     .toLowerCase();
 }
 
+function normalizeLookupPath(value) {
+  return String(value || "")
+    .replaceAll("\\", "/")
+    .replace(/^\.\/+/, "")
+    .replace(/\/+/g, "/")
+    .split("/")
+    .filter(Boolean)
+    .join("/")
+    .toLowerCase();
+}
+
+function createEmptyImageRegistry() {
+  return {
+    byPath: new Map(),
+    byBasename: new Map(),
+    revokeUrls: [],
+  };
+}
+
 function createImageRegistry(imageFiles) {
-  const byBasename = new Map();
-  const urls = [];
+  const registry = createEmptyImageRegistry();
   for (const file of imageFiles) {
     const url = URL.createObjectURL(file);
-    const basename = basenameFromPath(file.name);
-    urls.push(url);
-    byBasename.set(basename, { file, url, basename });
+    const pathKey = normalizeLookupPath(file.name);
+    const basenameKey = basenameFromPath(file.name);
+    registry.revokeUrls.push(url);
+    registry.byPath.set(pathKey, url);
+    if (!registry.byBasename.has(basenameKey)) {
+      registry.byBasename.set(basenameKey, url);
+    }
   }
-  return { byBasename, urls };
+  return registry;
+}
+
+function createImageRegistryFromPackage(images = {}) {
+  const registry = createEmptyImageRegistry();
+  const byPathEntries = images.by_path || images.byPath || {};
+  const byBasenameEntries = images.by_basename || images.byBasename || {};
+  for (const [path, url] of Object.entries(byPathEntries)) {
+    registry.byPath.set(normalizeLookupPath(path), url);
+  }
+  for (const [basename, url] of Object.entries(byBasenameEntries)) {
+    registry.byBasename.set(normalizeLookupPath(basename), url);
+  }
+  return registry;
 }
 
 function getVisualAssets() {
@@ -195,8 +240,9 @@ function getVisualAssetImageUrl(asset) {
   if (!registry || !asset || !asset.file) {
     return null;
   }
-  const match = registry.byBasename.get(basenameFromPath(asset.file));
-  return match ? match.url : null;
+  const pathKey = normalizeLookupPath(asset.file);
+  const basenameKey = basenameFromPath(asset.file);
+  return registry.byPath.get(pathKey) || registry.byBasename.get(basenameKey) || null;
 }
 
 function getVisualAssetForParticipant(participant) {
@@ -310,16 +356,42 @@ function renderLoadedPackageStatus(statusText, isError = false) {
 
   const parts = [
     `<p><strong>Источник:</strong> ${escapeHtml(source.sourceLabel)}</p>`,
-    source.fileName ? `<p><strong>JSON-файл:</strong> ${escapeHtml(source.fileName)}</p>` : "",
-    Number.isFinite(source.sizeBytes)
-      ? `<p><strong>Размер:</strong> ${escapeHtml(formatBytes(source.sizeBytes))}</p>`
-      : "",
-    `<p><strong>Изображений выбрано:</strong> ${escapeHtml(String(source.selectedImageCount || 0))}</p>`,
+    source.packageType === "zip" && source.archiveName
+      ? `<p><strong>ZIP-архив:</strong> ${escapeHtml(source.archiveName)}</p>`
+      : source.fileName
+        ? `<p><strong>JSON-файл:</strong> ${escapeHtml(source.fileName)}</p>`
+        : "",
+    source.packageType === "zip" && Number.isFinite(source.archiveSizeBytes)
+      ? `<p><strong>Размер архива:</strong> ${escapeHtml(formatBytes(source.archiveSizeBytes))}</p>`
+      : Number.isFinite(source.sizeBytes)
+        ? `<p><strong>Размер:</strong> ${escapeHtml(formatBytes(source.sizeBytes))}</p>`
+        : "",
+    `<p><strong>Изображений найдено:</strong> ${escapeHtml(String(source.selectedImageCount || 0))}</p>`,
     `<p><strong>Совпадений с visual_assets:</strong> ${escapeHtml(String(source.matchedImageCount || 0))}</p>`,
     source.unmatchedImageCount > 0
       ? `<p><strong>Неиспользовано:</strong> ${escapeHtml(String(source.unmatchedImageCount))}</p>`
       : "",
     `<p><strong>Сценарий:</strong> ${escapeHtml(source.title || "Без названия")}</p>`,
+    Array.isArray(source.warnings) && source.warnings.length
+      ? `
+        <div class="status-warnings">
+          <p><strong>Предупреждения:</strong></p>
+          <ul>
+            ${source.warnings.map((warning) => `<li>${escapeHtml(warning)}</li>`).join("")}
+          </ul>
+        </div>
+      `
+      : "",
+    Array.isArray(source.validationErrors) && source.validationErrors.length
+      ? `
+        <div class="status-warnings">
+          <p><strong>Ошибки проверки:</strong></p>
+          <ul>
+            ${source.validationErrors.map((error) => `<li>${escapeHtml(error)}</li>`).join("")}
+          </ul>
+        </div>
+      `
+      : "",
     statusText ? `<p><strong>Статус:</strong> ${escapeStatusHtml(statusText)}</p>` : "",
   ].filter(Boolean);
 
@@ -348,14 +420,90 @@ function getVisualAssetMatchCount(scenario, registry) {
   if (!registry) {
     return 0;
   }
-  return assets.filter((asset) => asset && asset.file && registry.byBasename.has(basenameFromPath(asset.file))).length;
+  return assets.filter((asset) => {
+    if (!asset || !asset.file) {
+      return false;
+    }
+    const pathKey = normalizeLookupPath(asset.file);
+    const basenameKey = basenameFromPath(asset.file);
+    return registry.byPath.has(pathKey) || registry.byBasename.has(basenameKey);
+  }).length;
 }
 
-async function loadCasePackage(files, sourceLabel) {
+async function loadCasePackageFromZip(zipFile, sourceLabel) {
+  const formData = new FormData();
+  formData.append("package", zipFile, zipFile.name);
+  const response = await fetch("/api/import-case-package", {
+    method: "POST",
+    body: formData,
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error((data.errors || ["Запрос не выполнен"]).join("<br>"));
+  }
+
+  const validation = data.validation || { ok: data.ok, errors: data.errors || [] };
+  const packageSummary = data.package_summary || {};
+  const warnings = Array.isArray(data.warnings) ? data.warnings : [];
+
+  if (!validation.ok) {
+    state.loadedScenarioMeta = {
+      sourceLabel,
+      packageType: "zip",
+      archiveName: packageSummary.archive_name || zipFile.name,
+      archiveSizeBytes: packageSummary.archive_size_bytes || zipFile.size,
+      title: packageSummary.scenario_title || "Без названия",
+      selectedImageCount: packageSummary.image_count || 0,
+      matchedImageCount: packageSummary.matched_image_count || 0,
+      unmatchedImageCount: packageSummary.unmatched_image_count || 0,
+      warnings,
+      validationErrors: validation.errors || [],
+    };
+    state.loadedScenario = null;
+    state.loadedImageRegistry = createEmptyImageRegistry();
+    dom.startScenarioBtn.disabled = true;
+    renderLoadedPackageStatus("ZIP-пакет не прошёл проверку сценария.", true);
+    return;
+  }
+
+  if (state.loadedImageRegistry) {
+    closeImageViewer();
+    revokeImageRegistry(state.loadedImageRegistry);
+  }
+  state.loadedScenario = data.scenario;
+  state.loadedImageRegistry = createImageRegistryFromPackage(data.images);
+  state.loadedScenarioMeta = {
+    sourceLabel,
+    packageType: "zip",
+    archiveName: packageSummary.archive_name || zipFile.name,
+    archiveSizeBytes: packageSummary.archive_size_bytes || zipFile.size,
+    title: packageSummary.scenario_title || getScenarioTitle(data.scenario),
+    selectedImageCount: packageSummary.image_count || 0,
+    matchedImageCount: packageSummary.matched_image_count || 0,
+    unmatchedImageCount: packageSummary.unmatched_image_count || 0,
+    warnings,
+  };
+  dom.startScenarioBtn.disabled = false;
+  renderLoadedPackageStatus("ZIP-пакет дела прочитан и проверен.");
+}
+
+async function loadCasePackageFromFiles(files, sourceLabel) {
+  clearLoadedPackage();
   const fileList = Array.from(files || []);
+  const zipFiles = fileList.filter(isZipFile);
   const jsonFiles = fileList.filter(isJsonFile);
   const imageFiles = fileList.filter(isSupportedImageFile);
-  const unsupportedFiles = fileList.filter((file) => !isJsonFile(file) && !isSupportedImageFile(file));
+  const unsupportedFiles = fileList.filter(
+    (file) => !isZipFile(file) && !isJsonFile(file) && !isSupportedImageFile(file)
+  );
+
+  if (zipFiles.length) {
+    if (zipFiles.length > 1 || jsonFiles.length || imageFiles.length || unsupportedFiles.length) {
+      throw new Error("Выберите либо один ZIP-архив, либо JSON-сценарий с изображениями, но не оба варианта одновременно.");
+    }
+    await loadCasePackageFromZip(zipFiles[0], "ZIP-пакет дела");
+    return;
+  }
 
   if (!jsonFiles.length) {
     throw new Error("Выберите один JSON-файл сценария.");
@@ -397,12 +545,14 @@ async function loadCasePackage(files, sourceLabel) {
     const matchedImageCount = getVisualAssetMatchCount(scenario, imageRegistry);
     state.loadedScenarioMeta = {
       sourceLabel,
+      packageType: "files",
       fileName: scenarioFile.name,
       sizeBytes: scenarioFile.size,
       title: getScenarioTitle(scenario),
       selectedImageCount: imageFiles.length,
       matchedImageCount,
       unmatchedImageCount: Math.max(0, imageFiles.length - matchedImageCount),
+      warnings: [],
     };
     dom.startScenarioBtn.disabled = false;
     renderLoadedPackageStatus("Пакет дела прочитан и проверен.");
@@ -414,10 +564,10 @@ async function loadCasePackage(files, sourceLabel) {
 }
 
 function revokeImageRegistry(registry) {
-  if (!registry || !Array.isArray(registry.urls)) {
+  if (!registry || !Array.isArray(registry.revokeUrls)) {
     return;
   }
-  for (const url of registry.urls) {
+  for (const url of registry.revokeUrls) {
     URL.revokeObjectURL(url);
   }
 }
@@ -977,15 +1127,17 @@ dom.loadDemoBtn.addEventListener("click", async () => {
     }
     clearLoadedPackage();
     state.loadedScenario = data;
-    state.loadedImageRegistry = { byBasename: new Map(), urls: [] };
+    state.loadedImageRegistry = createEmptyImageRegistry();
     state.loadedScenarioMeta = {
       sourceLabel: "Встроенный демо-пакет",
+      packageType: "demo",
       fileName: "demo_case.json",
       sizeBytes: new Blob([JSON.stringify(data)]).size,
       title: getScenarioTitle(data),
       selectedImageCount: 0,
       matchedImageCount: 0,
       unmatchedImageCount: 0,
+      warnings: [],
     };
     dom.startScenarioBtn.disabled = false;
     dom.casePackageInput.value = "";
@@ -1001,7 +1153,7 @@ dom.casePackageInput.addEventListener("change", async () => {
     if (!dom.casePackageInput.files || !dom.casePackageInput.files.length) {
       throw new Error("Пакет дела не выбран.");
     }
-    await loadCasePackage(dom.casePackageInput.files, "JSON-пакет дела");
+    await loadCasePackageFromFiles(dom.casePackageInput.files, "Пакет дела");
   } catch (error) {
     renderValidation(`Ошибка загрузки пакета дела: ${error.message}`, true);
   }

@@ -1,5 +1,11 @@
+import base64
+import io
 import json
 import mimetypes
+import posixpath
+import zipfile
+from email import policy
+from email.parser import BytesParser
 from copy import deepcopy
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -13,6 +19,9 @@ SCENARIO_DIR = REPO_ROOT / "scenarios"
 DEMO_SCENARIO_PATH = SCENARIO_DIR / "demo_case.json"
 HOST = "0.0.0.0"
 PORT = 8000
+MAX_CASE_PACKAGE_BYTES = 50 * 1024 * 1024
+MAX_CASE_PACKAGE_UNCOMPRESSED_BYTES = 120 * 1024 * 1024
+MAX_CASE_PACKAGE_FILES = 120
 
 REQUIRED_TOP_LEVEL_KEYS = {
     "metadata",
@@ -54,10 +63,52 @@ SUPPORTED_VISUAL_TARGET_TYPES = {
     "case",
     "object",
 }
+SUPPORTED_PACKAGE_IMAGE_EXTENSIONS = {
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".webp",
+    ".svg",
+}
 
 
 def load_demo_scenario():
     return json.loads(DEMO_SCENARIO_PATH.read_text(encoding="utf-8"))
+
+
+def normalize_package_path(path):
+    if not path:
+        return None
+    normalized = str(path).replace("\\", "/").strip()
+    if not normalized or normalized.startswith("/"):
+        return None
+    parts = []
+    for segment in normalized.split("/"):
+        if segment in ("", "."):
+            continue
+        if segment == "..":
+            return None
+        parts.append(segment)
+    if not parts:
+        return None
+    return "/".join(parts)
+
+
+def is_supported_package_image(filename):
+    return Path(filename.lower()).suffix in SUPPORTED_PACKAGE_IMAGE_EXTENSIONS
+
+
+def guess_mime_type(filename):
+    ext = Path(filename.lower()).suffix
+    if ext == ".svg":
+        return "image/svg+xml"
+    return mimetypes.guess_type(filename)[0] or "application/octet-stream"
+
+
+def make_data_url(filename, content):
+    mime_type = guess_mime_type(filename)
+    encoded = base64.b64encode(content).decode("ascii")
+    return f"data:{mime_type};base64,{encoded}"
 
 
 def normalize_payload(payload):
@@ -244,6 +295,196 @@ def validate_visual_asset(asset, participant_ids, errors, path):
             errors.append(f"{path} references unknown target_id '{target_id}'")
 
 
+def parse_multipart_form_data(headers, raw_body):
+    content_type = headers.get("Content-Type")
+    if not content_type or "multipart/form-data" not in content_type:
+        raise ValueError("Expected multipart/form-data request")
+
+    parser = BytesParser(policy=policy.default)
+    message = parser.parsebytes(
+        f"Content-Type: {content_type}\r\nMIME-Version: 1.0\r\n\r\n".encode("utf-8") + raw_body
+    )
+
+    files = []
+    for part in message.iter_parts():
+        disposition = part.get_content_disposition()
+        if disposition != "form-data":
+            continue
+        filename = part.get_filename()
+        name = part.get_param("name", header="content-disposition")
+        content = part.get_payload(decode=True) or b""
+        files.append({"name": name, "filename": filename, "content": content, "content_type": part.get_content_type()})
+    return files
+
+
+def build_images_lookup_from_entries(entries):
+    by_path = {}
+    by_basename = {}
+    duplicate_basenames = set()
+    for entry in entries:
+        path_key = entry["path"].lower()
+        basename_key = Path(entry["path"]).name.lower()
+        by_path[path_key] = entry["data_url"]
+        if basename_key in by_basename and by_basename[basename_key] != entry["data_url"]:
+            duplicate_basenames.add(basename_key)
+        else:
+            by_basename[basename_key] = entry["data_url"]
+    return by_path, by_basename, sorted(duplicate_basenames)
+
+
+def import_case_package_from_zip_bytes(zip_bytes, archive_name="case-package.zip"):
+    warnings = []
+    if len(zip_bytes) > MAX_CASE_PACKAGE_BYTES:
+        raise ValueError("ZIP-архив слишком большой для чернового MVP.")
+
+    try:
+        archive = zipfile.ZipFile(io.BytesIO(zip_bytes))
+    except zipfile.BadZipFile as error:
+        raise ValueError("Файл не является корректным ZIP-архивом.") from error
+
+    entries = []
+    total_uncompressed_bytes = 0
+    unsupported_files = []
+    scenario_candidates = []
+
+    for info in archive.infolist():
+        if info.is_dir():
+            continue
+        normalized_path = normalize_package_path(info.filename)
+        if not normalized_path:
+            raise ValueError(f"Небезопасный путь в ZIP-архиве: {info.filename}")
+        total_uncompressed_bytes += info.file_size
+        if total_uncompressed_bytes > MAX_CASE_PACKAGE_UNCOMPRESSED_BYTES:
+            raise ValueError("ZIP-архив слишком большой после распаковки для чернового MVP.")
+        if len(entries) >= MAX_CASE_PACKAGE_FILES:
+            raise ValueError("В ZIP-архиве слишком много файлов для чернового MVP.")
+
+        record = {
+            "path": normalized_path,
+            "basename": Path(normalized_path).name,
+            "size_bytes": info.file_size,
+        }
+        entries.append(record)
+        if Path(normalized_path).name.lower() == "scenario.json":
+            scenario_candidates.append(record)
+        elif not is_supported_package_image(normalized_path):
+            unsupported_files.append(normalized_path)
+
+    if not scenario_candidates:
+        raise ValueError("В ZIP-архиве не найден scenario.json.")
+    if len(scenario_candidates) > 1:
+        raise ValueError("В ZIP-архиве найдено несколько scenario.json. Оставьте только один сценарий.")
+
+    scenario_entry = scenario_candidates[0]
+    scenario_root = scenario_entry["path"].rsplit("/", 1)[0] if "/" in scenario_entry["path"] else ""
+    scenario_content = archive.read(scenario_entry["path"])
+    scenario_text = scenario_content.decode("utf-8")
+    if not scenario_text.strip():
+        raise ValueError("scenario.json в ZIP-архиве пуст.")
+
+    try:
+        scenario = json.loads(scenario_text)
+    except json.JSONDecodeError as error:
+        raise ValueError("Не удалось разобрать scenario.json из ZIP-архива.") from error
+
+    validation_errors = validate_scenario(scenario)
+    normalized_scenario = normalize_scenario(normalize_payload(scenario))
+
+    image_entries = []
+    for record in entries:
+        if not is_supported_package_image(record["path"]):
+            continue
+        if scenario_root and not (
+            record["path"] == scenario_root or record["path"].startswith(f"{scenario_root}/")
+        ):
+            continue
+        relative_path = record["path"][len(scenario_root) + 1 :] if scenario_root and record["path"].startswith(f"{scenario_root}/") else record["path"]
+        data = archive.read(record["path"])
+        image_entries.append(
+            {
+                "path": relative_path,
+                "archive_path": record["path"],
+                "basename": record["basename"],
+                "size_bytes": record["size_bytes"],
+                "content_type": guess_mime_type(record["path"]),
+                "data_url": make_data_url(record["path"], data),
+            }
+        )
+
+    images_by_path, images_by_basename, duplicate_basenames = build_images_lookup_from_entries(image_entries)
+
+    matched_asset_count = 0
+    used_lookup_keys = set()
+    missing_visual_assets = []
+    for asset in normalized_scenario.get("visual_assets", []):
+        file_name = asset.get("file")
+        if not file_name:
+            continue
+        lookup_path = normalize_package_path(file_name)
+        lookup_basename = Path(file_name).name.lower()
+        matched_url = None
+        if lookup_path and lookup_path.lower() in images_by_path:
+            matched_url = images_by_path[lookup_path.lower()]
+            used_lookup_keys.add(lookup_path.lower())
+        elif lookup_basename in images_by_basename:
+            matched_url = images_by_basename[lookup_basename]
+            used_lookup_keys.add(lookup_basename)
+        if not matched_url:
+            missing_visual_assets.append(asset.get("id") or file_name)
+        else:
+            matched_asset_count += 1
+
+    extra_images = []
+    for entry in image_entries:
+        path_key = entry["path"].lower()
+        basename_key = entry["basename"].lower()
+        if path_key not in used_lookup_keys and basename_key not in used_lookup_keys:
+            extra_images.append(entry["path"])
+
+    if duplicate_basenames:
+        warnings.append(
+            "В ZIP-архиве обнаружены повторяющиеся имена файлов изображений; для совпадения по basename будет использовано первое найденное изображение."
+        )
+    if unsupported_files:
+        warnings.append(
+            "В ZIP-архиве есть неподдерживаемые файлы: " + ", ".join(unsupported_files[:8]) + ("…" if len(unsupported_files) > 8 else "")
+        )
+    if extra_images:
+        warnings.append(
+            "В ZIP-архиве есть изображения, не связанные с visual_assets: "
+            + ", ".join(extra_images[:8])
+            + ("…" if len(extra_images) > 8 else "")
+        )
+    if missing_visual_assets:
+        warnings.append(
+            "Для visual_assets не найдены изображения: "
+            + ", ".join(missing_visual_assets[:8])
+            + ("…" if len(missing_visual_assets) > 8 else "")
+        )
+
+    package_summary = {
+        "archive_name": archive_name,
+        "archive_size_bytes": len(zip_bytes),
+        "scenario_file_name": scenario_entry["path"].split("/")[-1],
+        "scenario_path": scenario_entry["path"],
+        "scenario_title": normalized_scenario.get("metadata", {}).get("title", "Без названия"),
+        "image_count": len(image_entries),
+        "matched_image_count": matched_asset_count,
+        "unmatched_image_count": max(0, len(image_entries) - len(used_lookup_keys)),
+        "warnings": warnings,
+    }
+
+    return {
+        "ok": not validation_errors,
+        "errors": validation_errors,
+        "warnings": warnings,
+        "scenario": normalized_scenario,
+        "images": {"by_path": images_by_path, "by_basename": images_by_basename},
+        "package_summary": package_summary,
+        "validation": {"ok": not validation_errors, "errors": validation_errors},
+    }
+
+
 def validate_scenario(scenario):
     errors = []
     scenario = normalize_payload(scenario)
@@ -392,6 +633,14 @@ class AppHandler(BaseHTTPRequestHandler):
                 },
             )
             return
+        if parsed.path == "/api/import-case-package":
+            try:
+                result = self.import_case_package()
+            except ValueError as error:
+                self.send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "errors": [str(error)]})
+                return
+            self.send_json(HTTPStatus.OK, result)
+            return
         self.send_json(HTTPStatus.NOT_FOUND, {"ok": False, "errors": ["Unknown endpoint"]})
 
     def log_message(self, format, *args):
@@ -403,6 +652,38 @@ class AppHandler(BaseHTTPRequestHandler):
         if not raw:
             return {}
         return json.loads(raw.decode("utf-8"))
+
+    def read_raw_body(self, max_bytes=MAX_CASE_PACKAGE_BYTES):
+        length = int(self.headers.get("Content-Length", "0"))
+        if length > max_bytes:
+            raise ValueError("Запрос слишком большой для чернового MVP.")
+        return self.rfile.read(length) if length else b""
+
+    def import_case_package(self):
+        raw_body = self.read_raw_body()
+        parts = parse_multipart_form_data(self.headers, raw_body)
+        file_parts = [part for part in parts if part["filename"]]
+        if not file_parts:
+            raise ValueError("ZIP-архив не был передан.")
+        if len(file_parts) > 1:
+            raise ValueError("Передайте только один ZIP-архив пакета дела.")
+
+        file_part = file_parts[0]
+        filename = file_part["filename"]
+        if not filename.lower().endswith(".zip"):
+            raise ValueError("Пожалуйста, передайте ZIP-архив пакета дела.")
+
+        result = import_case_package_from_zip_bytes(file_part["content"], archive_name=filename)
+        package_summary = result["package_summary"]
+        return {
+            "ok": result["validation"]["ok"],
+            "errors": [],
+            "warnings": result["warnings"],
+            "scenario": result["scenario"],
+            "images": result["images"],
+            "package_summary": package_summary,
+            "validation": result["validation"],
+        }
 
     def serve_static(self, relative_path):
         target = (STATIC_DIR / relative_path).resolve()

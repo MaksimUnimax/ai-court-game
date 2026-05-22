@@ -21,7 +21,7 @@
         <section class="panel loader-panel">
           <h2>Загрузка дела</h2>
           <p class="panel-copy">
-            Выберите JSON-сценарий и связанные изображения дела одной формой. После старта игра идёт только кликами.
+            Выберите ZIP-пакет дела или JSON-сценарий с изображениями одной формой. После старта игра идёт только кликами.
           </p>
           <div class="file-upload-row">
             <label class="file-upload-label" for="case-package-input">Выбрать пакет дела</label>
@@ -30,10 +30,10 @@
               class="case-package-input"
               type="file"
               multiple
-              accept=".json,application/json,image/png,image/jpeg,image/webp"
+              accept=".zip,application/zip,application/x-zip-compressed,.json,application/json,image/png,image/jpeg,image/webp,image/svg+xml"
             />
             <p class="file-upload-hint">
-              Выберите один JSON-файл сценария и, при необходимости, изображения дела. Файлы читаются в браузере и не сохраняются на сервер.
+              Выберите один ZIP-архив или JSON-файл сценария и, при необходимости, изображения дела. Файлы читаются в браузере и не сохраняются на сервер.
             </p>
           </div>
           <div class="button-row">
