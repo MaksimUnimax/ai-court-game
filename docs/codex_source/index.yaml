@@ -1,8 +1,9 @@
 version: 0.1
 project: ai-court-game
 purpose: >
-  Documentation index for the AI Court Game project. Used by ChatGPT and Codex
-  to select exact docs paths, enforce documentation gates, and avoid guessing.
+  Индекс документации проекта AI Court Game. Используется ChatGPT и Codex
+  для выбора точных путей к документам, проверки documentation gates и
+  предотвращения догадок.
 
 repo:
   public_url: "https://github.com/MaksimUnimax/ai-court-game"

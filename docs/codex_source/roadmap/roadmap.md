@@ -4,28 +4,28 @@ STATUS: draft_1
 
 ## Roadmap block R001 — Draft MVP scenario scaffold
 
-Goal:
+Цель:
 
-Create a rough playable scenario scaffold before adding GPT API, images, auth or database.
+Собрать грубый playable-каркас сценария до добавления GPT API, изображений, авторизации и базы данных.
 
-Why:
+Почему:
 
-The core product risk is not backend complexity. The core product risk is whether generated court cases can be structured as fair, solvable, click-only puzzles.
+Главный риск продукта — не backend complexity. Главный риск — могут ли сгенерированные судебные дела быть честными, решаемыми, кликабельными головоломками.
 
-Scope:
+Объём:
 
-- scenario document import;
+- import сценарного документа;
 - parser;
-- text-only page;
-- clickable participants;
-- clickable questions;
-- clickable evidence;
-- verdict selection;
-- final explanation;
-- manual scenario generation by ChatGPT;
-- prompt-rule document for future GPT/API generation.
+- текстовая страница;
+- кликабельные участники;
+- кликабельные вопросы;
+- кликабельные доказательства;
+- выбор вердикта;
+- финальное объяснение;
+- ручная генерация сценариев ChatGPT;
+- документ с правилами prompt'ов для будущей GPT/API generation.
 
-Non-scope:
+Не входит:
 
 - OpenAI API;
 - image generation;
@@ -35,79 +35,79 @@ Non-scope:
 - database;
 - production deployment.
 
-Expected result:
+Ожидаемый результат:
 
-The user can upload a manually generated scenario document, play through it by clicking, reach a verdict and inspect the final explanation.
+Пользователь может загрузить вручную созданный сценарный документ, пройти его кликами, дойти до вердикта и изучить финальное объяснение.
 
-## Roadmap block R002 — Scenario format iteration
+## Roadmap block R002 — Итерация формата сценария
 
-Goal:
+Цель:
 
-Iterate on scenario JSON/document structure using real manual scenarios.
+Итеративно улучшать структуру сценария JSON/document на основе реальных ручных сценариев.
 
-Work:
+Работа:
 
-- create first test scenario manually with ChatGPT;
-- upload it to the draft page;
-- identify missing fields;
-- identify confusing UI placement;
-- refine scenario schema;
-- refine prompt rules;
-- repeat until cases are playable.
+- создать первый тестовый сценарий вручную с ChatGPT;
+- загрузить его на draft-страницу;
+- найти отсутствующие поля;
+- найти непонятное размещение UI;
+- улучшить схему сценария;
+- улучшить prompt rules;
+- повторять, пока сценарии не станут playable.
 
-Expected result:
+Ожидаемый результат:
 
-A stable draft scenario structure that can later become the GPT API response schema.
+Стабильная draft-структура сценария, которая позднее сможет стать GPT API response schema.
 
-## Roadmap block R003 — First implementation
+## Roadmap block R003 — Первая реализация
 
-Goal:
+Цель:
 
-Implement the rough page and parser.
+Реализовать грубую страницу и parser.
 
-Work:
+Работа:
 
-- create minimal backend or local script;
-- create scenario upload/import flow;
-- parse scenario JSON;
-- render case title and intro;
-- render participants;
-- render questions;
-- render evidence;
-- implement unlock conditions;
-- implement verdict selection;
-- render final explanation.
+- создать минимальный backend или локальный script;
+- создать flow загрузки/import сценария;
+- разбирать scenario JSON;
+- отображать заголовок дела и intro;
+- отображать участников;
+- отображать вопросы;
+- отображать доказательства;
+- реализовать unlock conditions;
+- реализовать выбор вердикта;
+- отображать финальное объяснение.
 
-Expected result:
+Ожидаемый результат:
 
-A working draft game loop without API, images, auth or database.
+Рабочий draft game loop без API, изображений, авторизации и базы данных.
 
-## Roadmap block R004 — Scenario quality rules
+## Roadmap block R004 — Правила качества сценариев
 
-Goal:
+Цель:
 
-Build the first reliable ruleset for scenario creation.
+Собрать первый надёжный набор правил для создания сценариев.
 
-Work:
+Работа:
 
-- collect failures from playtesting;
-- update scenario_prompt_rules.md;
-- define required fields;
-- define forbidden scenario patterns;
-- define solvability checklist;
-- define difficulty rules.
+- собирать failures из playtesting;
+- обновлять scenario_prompt_rules.md;
+- определять обязательные поля;
+- определять запрещённые паттерны сценариев;
+- определять solvability checklist;
+- определять правила сложности.
 
-Expected result:
+Ожидаемый результат:
 
-A strong manual prompt foundation for later GPT/API generation.
+Сильная ручная prompt-база для будущей GPT/API generation.
 
-## Roadmap block R005 — Future production architecture
+## Roadmap block R005 — Будущая production-архитектура
 
-Goal:
+Цель:
 
-After manual scenario flow works, design the real product architecture.
+После того как ручной сценарный flow работает, спроектировать реальную архитектуру продукта.
 
-Future topics:
+Будущие темы:
 
 - OpenAI API generation;
 - strict JSON response validation;
@@ -122,31 +122,31 @@ Future topics:
 - image generation;
 - deployment.
 
-This block is future work and must not be implemented in the draft MVP.
+Этот блок — future work, и его нельзя реализовывать в draft MVP.
 
-## Roadmap block R006 — Data-driven scenario graph engine design
+## Roadmap block R006 — Дизайн data-driven scenario graph engine
 
-Goal:
+Цель:
 
-Define and implement the universal scenario engine approach before building the first playable scaffold.
+Определить и реализовать универсальный сценарный engine до построения первой playable-версии.
 
-Why:
+Почему:
 
-The game must not use hardcoded dialogue frames or custom code per case. Each case must be described by data, and the engine must execute that data.
+Игра не должна использовать hardcoded dialogue frames или custom code per case. Каждый кейс должен описываться данными, а engine должен выполнять эти данные.
 
-Work:
+Работа:
 
-- document the scenario graph engine;
-- define participants as detailed entities;
-- define participant relationships;
-- define dialogue actions;
-- define evidence actions;
-- define conditions;
-- define effects;
-- define game state;
-- define validation rules;
-- update scenario prompt rules.
+- документировать scenario graph engine;
+- определить участников как детализированные сущности;
+- определить отношения между участниками;
+- определить dialogue actions;
+- определить evidence actions;
+- определить условия;
+- определить эффекты;
+- определить состояние игры;
+- определить правила валидации;
+- обновить scenario prompt rules.
 
-Expected result:
+Ожидаемый результат:
 
-The implementation can build different case flows from scenario data instead of hardcoded dialogue order.
+Реализация может строить разные flow дел из scenario data вместо hardcoded dialogue order.

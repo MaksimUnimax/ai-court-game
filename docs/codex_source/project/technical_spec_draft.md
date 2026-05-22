@@ -2,54 +2,54 @@
 
 STATUS: draft_1
 
-## Purpose
+## Назначение
 
-This document describes the first rough technical direction.
+Этот документ описывает первую грубую техническую направленность.
 
-This is not the production architecture.
+Это не production-архитектура.
 
-This is a temporary scaffold for testing scenario structure and gameplay logic.
+Это временный каркас для тестирования структуры сценариев и логики геймплея.
 
-## Core idea
+## Основная идея
 
-The first implementation should load a prepared scenario document, parse it, and render a click-only court-case game.
+Первая реализация должна загружать подготовленный сценарный документ, разбирать его и отображать кликабельную игру про судебное дело.
 
-The scenario is created manually outside the app.
+Сценарий создаётся вручную вне приложения.
 
-The app does not call GPT.
+Приложение не вызывает GPT.
 
-The app does not generate images.
+Приложение не генерирует изображения.
 
-The app does not use authorization.
+Приложение не использует авторизацию.
 
-The app does not use database persistence.
+Приложение не использует постоянное хранение в базе данных.
 
-## High-level components
+## Высокоуровневые компоненты
 
-Draft MVP components:
+Компоненты draft MVP:
 
-1. Scenario document.
-2. Scenario parser.
-3. Simple backend or local script.
-4. Browser page.
-5. Game state in memory.
+1. Сценарный документ.
+2. Парсер сценария.
+3. Простой backend или локальный скрипт.
+4. Браузерная страница.
+5. Game state в памяти.
 6. Verdict/result screen.
 
-## Scenario document
+## Сценарный документ
 
-The scenario document must contain structured data.
+Сценарный документ должен содержать структурированные данные.
 
-The exact format can be JSON first.
+Пока допустим формат JSON.
 
-JSON is preferred for the first implementation because:
+JSON предпочтителен для первой реализации, потому что:
 
-- it is easy to parse;
-- it avoids ambiguity;
-- it is close to future GPT API response format;
-- it can be validated;
-- it can be edited manually while testing.
+- его легко парсить;
+- он снимает неоднозначность;
+- он близок к будущему формату ответа GPT API;
+- его можно валидировать;
+- его можно редактировать вручную во время тестирования.
 
-The scenario document must include:
+Сценарный документ должен включать:
 
 - scenario id;
 - title;
@@ -66,95 +66,95 @@ The scenario document must include:
 - solution explanation;
 - prompt-development notes.
 
-## Parser responsibility
+## Ответственность парсера
 
-The parser must:
+Парсер должен:
 
-- accept uploaded scenario data;
-- validate required fields;
-- reject broken scenario structure;
-- normalize scenario data into internal game state;
-- map participants to UI cards;
-- map questions to participants;
-- map evidence to evidence cards;
-- apply unlock conditions;
-- expose verdict options.
+- принимать загруженные данные сценария;
+- проверять обязательные поля;
+- отклонять сломанную структуру сценария;
+- нормализовывать данные сценария во внутреннее состояние игры;
+- сопоставлять участников с UI-карточками;
+- сопоставлять вопросы с участниками;
+- сопоставлять доказательства с карточками доказательств;
+- применять условия разблокировки;
+- показывать варианты вердикта.
 
-The parser must not invent missing scenario content.
+Парсер не должен придумывать отсутствующий контент сценария.
 
-If a required field is missing, the parser should show a clear error.
+Если обязательного поля нет, парсер должен показать понятную ошибку.
 
-## UI responsibility
+## Ответственность UI
 
-The page must:
+Страница должна:
 
-- show case title and intro;
-- show participants;
-- show evidence list;
-- show available questions;
-- show clicked answers;
-- show newly unlocked content;
-- show verdict buttons;
-- show final explanation after verdict.
+- показывать заголовок дела и краткое описание;
+- показывать участников;
+- показывать список доказательств;
+- показывать доступные вопросы;
+- показывать выбранные ответы;
+- показывать новый разблокированный контент;
+- показывать кнопки вердикта;
+- показывать финальное объяснение после вердикта.
 
-The UI must not provide free text input.
+UI не должен предоставлять свободный ввод текста.
 
-All interaction is by buttons and clickable cards.
+Всё взаимодействие происходит через кнопки и кликабельные карточки.
 
 ## Game state
 
-The draft MVP may keep game state in memory.
+Draft MVP может хранить состояние игры в памяти.
 
-State should track:
+Состояние должно отслеживать:
 
-- loaded scenario;
-- opened participant cards;
-- asked questions;
-- revealed evidence;
-- unlocked questions;
-- selected verdict;
-- finished/not finished.
+- загруженный сценарий;
+- открытые карточки участников;
+- заданные вопросы;
+- раскрытые доказательства;
+- разблокированные вопросы;
+- выбранный вердикт;
+- завершена игра или нет.
 
-No database is required in this version.
+В этой версии база данных не требуется.
 
-## Unlock logic
+## Логика разблокировки
 
-Scenarios may include content that is initially hidden.
+Сценарии могут содержать контент, который изначально скрыт.
 
-Unlockable content may include:
+Разблокируемый контент может включать:
 
-- new evidence;
-- new questions;
-- extra participant statements;
-- final verdict availability.
+- новые доказательства;
+- новые вопросы;
+- дополнительные реплики участников;
+- доступность финального вердикта.
 
-Unlock conditions should be simple and deterministic.
+Условия разблокировки должны быть простыми и детерминированными.
 
-Examples:
+Примеры:
 
 - question Q1 asked;
 - evidence E2 opened;
 - both Q3 and E1 discovered.
 
-No random unlocks in the first draft MVP.
+В первом draft MVP нет случайных разблокировок.
 
-## Verdict logic
+## Логика вердикта
 
-The scenario contains the correct verdict.
+Сценарий содержит правильный вердикт.
 
-The page compares the player's selected verdict with the correct verdict.
+Страница сравнивает выбранный игроком вердикт с правильным вердиктом.
 
-After verdict, the page shows:
+После вердикта страница показывает:
 
-- whether the player was correct;
-- what really happened;
-- key evidence;
-- key contradictions;
-- why the wrong verdict is wrong.
+- был ли игрок прав;
+- что произошло на самом деле;
+- ключевое доказательство;
+- ключевые противоречия;
+- почему неправильный вердикт неверен.
 
-## Future production direction
+## Будущее production-направление
 
-Later versions may add:
+Позднее версии могут добавить:
 
 - OpenAI API generation;
 - image generation;
@@ -169,15 +169,15 @@ Later versions may add:
 - illustrations;
 - production deployment.
 
-These are not part of the draft MVP.
+Это не часть draft MVP.
 
 ## Addendum — Data-driven scenario graph engine
 
-The draft MVP must not use hardcoded dialogue frames.
+Draft MVP не должен использовать hardcoded dialogue frames.
 
-The draft MVP must use a universal data-driven scenario graph engine.
+Draft MVP должен использовать универсальный data-driven scenario graph engine.
 
-The scenario document controls:
+Сценарный документ управляет:
 
 - participants;
 - participant details;
@@ -192,22 +192,22 @@ The scenario document controls:
 - verdict options;
 - final explanation.
 
-The code must implement universal mechanics only.
+Код должен реализовывать только универсальную механику.
 
-The code must not contain case-specific logic.
+Код не должен содержать case-specific logic.
 
-A new case must be added by changing scenario data, not by writing new application code.
+Новый кейс должен добавляться изменением scenario data, а не написанием нового application code.
 
-The first implementation should support simple deterministic conditions and effects.
+Первая реализация должна поддерживать простые детерминированные условия и эффекты.
 
-Initial condition groups:
+Начальные группы условий:
 
 - always;
 - all;
 - any;
 - not.
 
-Initial condition types:
+Начальные типы условий:
 
 - question_asked;
 - evidence_opened;
@@ -216,7 +216,7 @@ Initial condition types:
 - action_done;
 - verdict_enabled.
 
-Initial effect types:
+Начальные типы эффектов:
 
 - mark_action_done;
 - unlock_question;
@@ -226,10 +226,10 @@ Initial effect types:
 - show_note;
 - enable_verdict.
 
-## Implementation note — First scaffold
+## Примечание по реализации — First scaffold
 
-The first scaffold implementation uses a small Python standard-library server and a static browser UI.
+Первая реализация каркаса использует небольшой Python-сервер на стандартной библиотеке и статический браузерный UI.
 
-The server serves the page, returns a built-in demo scenario, validates scenario JSON and returns normalized initial state.
+Сервер отдаёт страницу, возвращает встроенный demo scenario, валидирует сценарный JSON и возвращает нормализованное начальное состояние.
 
-The browser runs the first universal click-only scenario engine for participants, evidence, dialogue actions, conditions, effects, verdicts and final explanation.
+Браузер запускает первую универсальную click-only scenario engine для участников, доказательств, dialogue actions, условий, эффектов, verdicts и финального объяснения.

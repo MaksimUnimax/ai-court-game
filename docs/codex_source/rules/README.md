@@ -1,8 +1,7 @@
-# Rules
+# Правила
 
-This directory contains AI Court Game working rules adapted from the published OpenScript Agent Lab docs workflow.
+В этом каталоге находятся рабочие правила AI Court Game, адаптированные из опубликованного workflow OpenScript Agent Lab docs.
 
-The rules are project-level documentation rules. They do not replace root `AGENTS.md`.
+Эти правила относятся к документации уровня проекта. Они не заменяют root `AGENTS.md`.
 
-Codex must follow root `AGENTS.md` first, then read exact rules files only when ChatGPT lists them in `DOCS_TO_READ`.
-
+Codex должен сначала следовать root `AGENTS.md`, а затем читать только точные rules-файлы, которые ChatGPT перечислит в `DOCS_TO_READ`.

@@ -1,4 +1,3 @@
-# Project
+# Проект
 
-This directory will hold project-level documentation.
-
+В этом каталоге будет храниться документация уровня проекта.

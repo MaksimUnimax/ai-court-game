@@ -1,4 +1,3 @@
 # Task Cards
 
-This directory will hold task cards.
-
+В этом каталоге будут храниться task cards.

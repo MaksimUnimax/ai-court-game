@@ -2,5 +2,5 @@ version: 0.4
 project: ai-court-game
 file: docs/codex_source/context/current_dialogue_context.md
 append_only: true
-last_append_id: CTX-2026-05-22-003
-status: first_scaffold_started
+last_append_id: CTX-2026-05-22-004
+status: russian_language_rule_recorded

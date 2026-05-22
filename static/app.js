@@ -95,7 +95,7 @@ function escapeHtml(value) {
 function parseScenarioInput() {
   const raw = dom.scenarioInput.value.trim();
   if (!raw) {
-    throw new Error("Scenario JSON is empty.");
+    throw new Error("JSON сценария пуст.");
   }
   return JSON.parse(raw);
 }
@@ -108,7 +108,7 @@ async function postJson(url, payload) {
   });
   const data = await response.json();
   if (!response.ok) {
-    throw new Error((data.errors || ["Request failed"]).join("<br>"));
+    throw new Error((data.errors || ["Запрос не выполнен"]).join("<br>"));
   }
   return data;
 }
@@ -190,7 +190,7 @@ function renderCaseIntro() {
     <h3>${escapeHtml(metadata.title)}</h3>
     <p class="muted">${escapeHtml(metadata.case_type)} · ${escapeHtml(metadata.difficulty)}</p>
     <p>${escapeHtml(intro.summary)}</p>
-    <p><strong>Judge briefing:</strong> ${escapeHtml(intro.judge_briefing)}</p>
+    <p><strong>Брифинг судьи:</strong> ${escapeHtml(intro.judge_briefing)}</p>
   `;
 }
 
@@ -203,7 +203,7 @@ function renderParticipants() {
           <h3>${escapeHtml(participant.name)}</h3>
           <div class="pill">${escapeHtml(participant.role)}</div>
           <p class="muted">${escapeHtml(participant.position)}</p>
-          <button type="button" data-participant-id="${escapeHtml(participant.id)}">Inspect participant</button>
+          <button type="button" data-participant-id="${escapeHtml(participant.id)}">Изучить участника</button>
         </div>
       `;
     })
@@ -215,22 +215,22 @@ function renderParticipants() {
 
   const participant = state.scenario.participants.find((item) => item.id === state.selectedParticipantId);
   if (!participant) {
-    dom.participantDetailPanel.textContent = "Select a participant card to inspect details.";
+    dom.participantDetailPanel.textContent = "Выберите карточку участника, чтобы посмотреть детали.";
     return;
   }
   dom.participantDetailPanel.innerHTML = `
     <h3>${escapeHtml(participant.name)}</h3>
-    <p><strong>Role:</strong> ${escapeHtml(participant.role)}</p>
-    <p><strong>Position:</strong> ${escapeHtml(participant.position)}</p>
-    <p><strong>Relation to case:</strong> ${escapeHtml(participant.relation_to_case)}</p>
+    <p><strong>Роль:</strong> ${escapeHtml(participant.role)}</p>
+    <p><strong>Позиция:</strong> ${escapeHtml(participant.position)}</p>
+    <p><strong>Связь с делом:</strong> ${escapeHtml(participant.relation_to_case)}</p>
     <p>${escapeHtml(participant.public_description)}</p>
-    <p><strong>Participant links:</strong> ${escapeHtml(participant.relationships.join("; "))}</p>
+    <p><strong>Связи участника:</strong> ${escapeHtml(participant.relationships.join("; "))}</p>
   `;
 }
 
 function renderRelationships() {
   if (!state.scenario.relationships.length) {
-    dom.relationshipsPanel.textContent = "No relationships defined.";
+    dom.relationshipsPanel.textContent = "Отношения не заданы.";
     return;
   }
   const participantMap = new Map(state.scenario.participants.map((item) => [item.id, item]));
@@ -254,7 +254,7 @@ function renderRelationships() {
 function renderEvidence() {
   const visibleEvidence = state.scenario.evidence.filter(isEvidenceVisible);
   if (!visibleEvidence.length) {
-    dom.evidencePanel.textContent = "No visible evidence yet.";
+    dom.evidencePanel.textContent = "Пока нет видимых доказательств.";
     dom.evidencePanel.className = "card-list empty-state";
     return;
   }
@@ -266,9 +266,9 @@ function renderEvidence() {
         <div class="list-card">
           <h3>${escapeHtml(evidence.title)}</h3>
           <p>${escapeHtml(evidence.short_description)}</p>
-          <div class="pill">${opened ? "Opened" : "Available"}</div>
+          <div class="pill">${opened ? "Открыто" : "Доступно"}</div>
           <button type="button" data-evidence-id="${escapeHtml(evidence.id)}">
-            ${opened ? "Review evidence" : "Open evidence"}
+            ${opened ? "Пересмотреть доказательство" : "Открыть доказательство"}
           </button>
         </div>
       `;
@@ -279,15 +279,15 @@ function renderEvidence() {
     state.scenario.evidence.find((item) => item.id === state.selectedEvidenceId) ||
     visibleEvidence[0];
   if (!selectedEvidence) {
-    dom.evidenceDetailPanel.textContent = "Click evidence to inspect it.";
+    dom.evidenceDetailPanel.textContent = "Нажмите на доказательство, чтобы изучить его.";
     return;
   }
   state.selectedEvidenceId = selectedEvidence.id;
   dom.evidenceDetailPanel.innerHTML = `
     <h3>${escapeHtml(selectedEvidence.title)}</h3>
     <p>${escapeHtml(selectedEvidence.inspection_text)}</p>
-    <p><strong>What it proves:</strong> ${escapeHtml(selectedEvidence.proves)}</p>
-    <p><strong>Key evidence:</strong> ${selectedEvidence.key_evidence ? "yes" : "no"}</p>
+    <p><strong>Что оно доказывает:</strong> ${escapeHtml(selectedEvidence.proves)}</p>
+    <p><strong>Ключевое доказательство:</strong> ${selectedEvidence.key_evidence ? "да" : "нет"}</p>
   `;
 }
 
@@ -300,7 +300,7 @@ function renderActions() {
   });
   const visibleGroups = groups.filter((group) => group.actions.length);
   if (!visibleGroups.length) {
-    dom.actionsPanel.textContent = "No dialogue actions available.";
+    dom.actionsPanel.textContent = "Диалоговые действия пока недоступны.";
     dom.actionsPanel.className = "action-groups empty-state";
     return;
   }
@@ -327,7 +327,7 @@ function renderActions() {
                   <button type="button" data-action-id="${escapeHtml(action.id)}" ${
                     enabled ? "" : "disabled"
                   }>
-                    ${escapeHtml(done ? `${action.label} (asked)` : action.label)}
+                    ${escapeHtml(done ? `${action.label} (задан)` : action.label)}
                   </button>
                 `;
               })
@@ -355,7 +355,7 @@ function renderEventLog() {
   }
 
   if (!entries.length) {
-    dom.eventLogPanel.textContent = "No events recorded yet.";
+    dom.eventLogPanel.textContent = "События пока не записаны.";
     dom.eventLogPanel.className = "log-list empty-state";
     return;
   }
@@ -375,7 +375,7 @@ function renderEventLog() {
 function renderVerdicts() {
   const verdicts = state.scenario.verdicts.filter(isVerdictVisible);
   if (!verdicts.length) {
-    dom.verdictPanel.textContent = "Verdict options are not enabled yet.";
+    dom.verdictPanel.textContent = "Варианты вердикта пока не доступны.";
     dom.verdictPanel.className = "card-list empty-state";
     return;
   }
@@ -390,7 +390,7 @@ function renderVerdicts() {
           <button type="button" data-verdict-id="${escapeHtml(verdict.id)}" ${
             enabled ? "" : "disabled"
           }>
-            ${escapeHtml(chosen ? "Selected" : "Choose verdict")}
+            ${escapeHtml(chosen ? "Выбран" : "Выбрать вердикт")}
           </button>
         </div>
       `;
@@ -400,7 +400,7 @@ function renderVerdicts() {
 
 function renderFinalExplanation() {
   if (!state.engine.finished) {
-    dom.finalExplanationPanel.textContent = "The final explanation appears after a verdict is selected.";
+    dom.finalExplanationPanel.textContent = "Финальное объяснение появится после выбора вердикта.";
     dom.finalExplanationPanel.className = "empty-state";
     return;
   }
@@ -408,8 +408,8 @@ function renderFinalExplanation() {
   const correct = state.engine.selectedVerdict === solution.correct_verdict_id;
   dom.finalExplanationPanel.className = correct ? "detail-panel final-good" : "detail-panel final-bad";
   dom.finalExplanationPanel.innerHTML = `
-    <h3>${correct ? "Correct verdict" : "Incorrect verdict"}</h3>
-    <p><strong>Expected verdict:</strong> ${escapeHtml(
+    <h3>${correct ? "Правильный вердикт" : "Неправильный вердикт"}</h3>
+    <p><strong>Ожидаемый вердикт:</strong> ${escapeHtml(
       state.scenario.verdicts.find((item) => item.id === solution.correct_verdict_id)?.label || solution.correct_verdict_id
     )}</p>
     <p>${escapeHtml(solution.explanation)}</p>
@@ -438,7 +438,7 @@ function startScenarioFromResponse(data) {
   state.engine = createEngine(data.initial_state);
   state.selectedParticipantId = data.scenario.participants[0]?.id || null;
   state.selectedEvidenceId = null;
-  renderValidation("Scenario valid. Click through participants, evidence, and verdicts to test the graph flow.");
+  renderValidation("Сценарий валиден. Кликайте по участникам, доказательствам и вердиктам, чтобы протестировать граф.");
   renderAll();
 }
 
@@ -482,7 +482,7 @@ function handleVerdictClick(verdictId) {
   }
   state.engine.selectedVerdict = verdict.id;
   state.engine.finished = true;
-  state.engine.log.push({ type: "verdict", text: `Verdict selected: ${verdict.label}` });
+    state.engine.log.push({ type: "verdict", text: `Выбран вердикт: ${verdict.label}` });
   renderAll();
 }
 
@@ -491,9 +491,9 @@ dom.loadDemoBtn.addEventListener("click", async () => {
     const response = await fetch("/api/demo-scenario");
     const data = await response.json();
     dom.scenarioInput.value = JSON.stringify(data, null, 2);
-    renderValidation("Demo scenario loaded into the textarea.");
+    renderValidation("Демо-сценарий загружен в textarea.");
   } catch (error) {
-    renderValidation(`Failed to load demo scenario: ${escapeHtml(error.message)}`, true);
+    renderValidation(`Не удалось загрузить демо-сценарий: ${escapeHtml(error.message)}`, true);
   }
 });
 

@@ -1,4 +1,3 @@
-# Module Map
+# Карта модулей
 
-This directory will hold the repository module map.
-
+В этом каталоге будет храниться карта модулей репозитория.

@@ -2,36 +2,35 @@
 
 STATUS: initial
 
-Purpose:
+Назначение:
 
-- This is the first file ChatGPT should read at the start of a new AI Court Game project dialogue.
-- It exists so ChatGPT and Codex use repo memory instead of guessing from prior chat state.
-- Do not rely only on memory before checking this entrypoint and the current docs index.
+- Это первый файл, который ChatGPT должен читать в начале нового диалога по AI Court Game.
+- Он нужен, чтобы ChatGPT и Codex опирались на память репозитория, а не гадали по прошлому состоянию чата.
+- Не полагайтесь только на память, пока не проверите этот entrypoint и текущий индекс документации.
 
-Current known repo:
+Текущее известное состояние репозитория:
 
 - Public repo: `https://github.com/MaksimUnimax/ai-court-game`
 - Local project root: `/opt/ai-court-game`
 - Docs root: `docs/codex_source/**`
 
-Current bootstrap state:
+Текущее состояние bootstrap:
 
-- Root `AGENTS.md` should exist.
-- Rules should exist under `docs/codex_source/rules/**`.
-- Product ТЗ is not written yet.
-- Roadmap content is not written yet.
-- Application code is not created yet.
+- Root `AGENTS.md` должен существовать.
+- Rules должны находиться в `docs/codex_source/rules/**`.
+- Product ТЗ ещё не написано.
+- Roadmap ещё не написан.
+- Application code ещё не создан.
 
-Main read path:
+Основной путь чтения:
 
 1. `AGENTS.md`
 2. `docs/codex_source/index.yaml`
-3. exact files listed by ChatGPT in the current prompt
+3. точные файлы, перечисленные ChatGPT в текущем prompt
 
-Notes:
+Примечания:
 
-- Roadmap/context are historical/project memory, not source-of-truth for external API behavior.
-- For technical tasks, read exact required docs only.
-- For append-only updates, read manifest + tail only, not the entire large context.
-- If a required doc is missing/stub/contradictory, future fix-runs must stop with `STOP_DOCS_MISSING`.
-
+- Roadmap/context — это историческая память проекта, а не source-of-truth для поведения внешнего API.
+- Для технических задач читайте только точные требуемые документы.
+- Для append-only обновлений читайте только manifest + tail, а не весь большой context.
+- Если обязательный документ отсутствует, является stub или противоречивым, будущие fix-run'ы должны останавливаться с `STOP_DOCS_MISSING`.

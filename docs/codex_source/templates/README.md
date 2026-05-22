@@ -1,4 +1,3 @@
-# Templates
+# Шаблоны
 
-This directory will hold documentation templates.
-
+В этом каталоге будут храниться шаблоны документации.

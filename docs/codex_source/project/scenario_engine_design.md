@@ -2,105 +2,105 @@
 
 STATUS: draft_1
 
-## Core decision
+## Ключевое решение
 
-AI Court Game must use a Universal data-driven scenario graph engine.
+AI Court Game должен использовать universal data-driven scenario graph engine.
 
-The game must not hardcode dialogue frames for each case.
+Игра не должна hardcode-ить dialogue frames для каждого дела.
 
-The game must not require new application code for each new case.
+Игра не должна требовать новый application code для каждого нового дела.
 
-Each case must be described by scenario data.
+Каждое дело должно описываться scenario data.
 
-The engine must read the scenario document, build the available actions from that document, track player state, apply conditions and effects, and display the case flow through clickable UI.
+Engine должен читать сценарный документ, строить доступные действия на основе этого документа, отслеживать состояние игрока, применять условия и эффекты и отображать ход дела через кликабельный UI.
 
-## Why this matters
+## Почему это важно
 
-The main product risk is not whether a page can show text.
+Главный риск продукта — не в том, может ли страница показывать текст.
 
-The main product risk is whether many different court cases can be represented as fair, solvable, click-only puzzles without writing custom code for each case.
+Главный риск — в том, смогут ли многие разные судебные дела быть представлены как честные, решаемые, кликабельные головоломки без написания custom code для каждого случая.
 
-A hardcoded approach would fail quickly because every case may need different:
+Hardcoded-подход быстро сломается, потому что каждому делу могут понадобиться разные:
 
-- participant relationships;
-- question order;
-- evidence dependencies;
-- unlock rules;
-- contradictions;
-- dialogue branches;
-- verdict reasoning;
-- final explanation.
+- отношения между участниками;
+- порядок вопросов;
+- зависимости доказательств;
+- правила разблокировки;
+- противоречия;
+- ветвления диалогов;
+- рассуждение для вердикта;
+- финальное объяснение.
 
-Therefore the scenario must define the case logic, and the code must only execute universal mechanics.
+Поэтому сценарий должен определять логику дела, а код должен выполнять только универсальную механику.
 
-## Engine responsibility
+## Ответственность engine
 
-The engine is responsible for universal mechanics only.
+Engine отвечает только за универсальную механику.
 
-The engine may:
+Engine может:
 
-- load a scenario document;
-- validate the scenario structure;
-- create initial game state;
-- show available participants;
-- show available evidence;
-- show available dialogue actions;
-- check action availability;
-- apply action effects;
-- reveal new questions;
-- reveal new evidence;
-- mark facts as discovered;
-- mark contradictions as found;
-- enable verdict options;
-- compare selected verdict with the correct verdict;
-- show final explanation.
+- загружать сценарный документ;
+- валидировать структуру сценария;
+- создавать начальное состояние игры;
+- показывать доступных участников;
+- показывать доступные доказательства;
+- показывать доступные dialogue actions;
+- проверять доступность действий;
+- применять эффекты действий;
+- открывать новые вопросы;
+- открывать новые доказательства;
+- отмечать факты как обнаруженные;
+- отмечать противоречия как найденные;
+- включать доступность вердиктов;
+- сравнивать выбранный вердикт с правильным;
+- показывать финальное объяснение.
 
-The engine must not:
+Engine не должен:
 
-- know the plot in advance;
-- contain case-specific if/else logic;
-- hardcode a dialogue order;
-- hardcode evidence order;
-- hardcode role behavior;
-- invent missing scenario content;
-- write new code for each case.
+- знать сюжет заранее;
+- содержать case-specific if/else logic;
+- hardcode-ить порядок диалогов;
+- hardcode-ить порядок доказательств;
+- hardcode-ить поведение ролей;
+- придумывать отсутствующий контент сценария;
+- писать новый code для каждого дела.
 
-## Scenario as graph
+## Сценарий как graph
 
-A scenario should be treated as a graph.
+Сценарий следует рассматривать как graph.
 
-Graph nodes may include:
+Graph nodes могут включать:
 
-- participant cards;
+- карточки участников;
 - dialogue actions;
-- evidence items;
-- facts;
-- contradictions;
-- notes;
-- verdict options;
-- final explanation blocks.
+- элементы доказательств;
+- факты;
+- противоречия;
+- заметки;
+- варианты вердикта;
+- блоки финального объяснения.
 
-Graph edges are represented through conditions and effects.
+Graph edges выражаются через условия и эффекты.
 
-Examples:
+Примеры:
 
-- asking one question unlocks another question;
-- opening evidence unlocks a new question;
-- discovering a fact reveals a contradiction;
-- finding a contradiction enables a verdict;
-- opening two pieces of evidence unlocks a final challenge question.
+- один вопрос открывает следующий вопрос;
+- открытие доказательства открывает новый вопрос;
+- обнаружение факта раскрывает противоречие;
+- нахождение противоречия делает вердикт доступным;
+- открытие двух доказательств открывает финальный challenge-вопрос.
 
-The player does not need to see the graph.
+Игроку не нужно видеть graph.
 
-The player only sees available clickable actions.
+Игрок видит только доступные кликабельные действия.
 
-## Participants
+## Участники
 
-Participants must be detailed.
+Участники должны быть детализированными.
 
-A participant is not just a name or a role.
+Участник — это не просто имя или роль.
 
-Each participant should support fields such as:
+Для каждого участника должны поддерживаться поля вроде:
 
 - id;
 - name;
@@ -116,25 +116,25 @@ Each participant should support fields such as:
 - dependency on other participants;
 - contradiction potential.
 
-Relationships between participants are part of the scenario.
+Отношения между участниками — часть сценария.
 
-Examples of relationships:
+Примеры отношений:
 
-- former business partners;
-- employer and employee;
-- family members;
-- debtor and creditor;
-- prosecutor and accused;
-- defense lawyer and accused;
-- two sides of a civil dispute.
+- бывшие бизнес-партнёры;
+- работодатель и сотрудник;
+- члены семьи;
+- должник и кредитор;
+- прокурор и обвиняемый;
+- адвокат защиты и обвиняемый;
+- две стороны гражданского спора.
 
-These relationships should be available to the UI and to the scenario logic.
+Эти отношения должны быть доступны UI и логике сценария.
 
 ## Dialogue actions
 
-Dialogue must be represented as scenario actions, not as a fixed script.
+Диалоги должны быть представлены как scenario actions, а не как fixed script.
 
-A dialogue action should contain:
+Dialogue action должен содержать:
 
 - id;
 - participant id;
@@ -146,17 +146,17 @@ A dialogue action should contain:
 - optional relation to evidence;
 - optional relation to facts or contradictions.
 
-A dialogue action may be available at the start or unlocked later.
+Dialogue action может быть доступен в начале или разблокирован позже.
 
-The scenario controls this.
+Это управляется сценарием.
 
-The code does not hardcode the order.
+Код не hardcode-ит порядок.
 
 ## Evidence actions
 
-Evidence must be represented as scenario objects/actions.
+Доказательства должны быть представлены как scenario objects/actions.
 
-An evidence item should contain:
+Evidence item должен содержать:
 
 - id;
 - title;
@@ -168,24 +168,24 @@ An evidence item should contain:
 - whether it is key evidence;
 - relation to facts or contradictions.
 
-In the draft MVP, evidence is text-only.
+В draft MVP доказательства текстовые.
 
-Images are future work.
+Изображения — future work.
 
-## Conditions
+## Условия
 
-Conditions define whether an action is available.
+Условия определяют, доступно ли действие.
 
-The first draft engine should use a simple safe condition format.
+Первая версия engine должна использовать простой безопасный формат условий.
 
-Allowed condition groups:
+Разрешённые группы условий:
 
 - always;
 - all;
 - any;
 - not.
 
-Initial condition types:
+Начальные типы условий:
 
 - question_asked;
 - evidence_opened;
@@ -194,22 +194,22 @@ Initial condition types:
 - action_done;
 - verdict_enabled.
 
-Examples:
+Примеры:
 
-- available after a question is asked;
-- available after evidence is opened;
-- available after both a question and evidence are completed;
-- unavailable after verdict is selected.
+- доступно после того, как задан вопрос;
+- доступно после открытия доказательства;
+- доступно после выполнения и вопроса, и доказательства;
+- недоступно после выбора вердикта.
 
-Conditions must be data, not executable code.
+Условия должны быть данными, а не исполняемым кодом.
 
-The first implementation should not use arbitrary JavaScript expressions in scenario files.
+Первая реализация не должна использовать arbitrary JavaScript expressions в scenario files.
 
-## Effects
+## Эффекты
 
-Effects define what happens after a player clicks an action.
+Эффекты определяют, что происходит после клика по действию.
 
-Initial effect types:
+Начальные типы эффектов:
 
 - mark_action_done;
 - unlock_question;
@@ -219,17 +219,17 @@ Initial effect types:
 - show_note;
 - enable_verdict.
 
-Effects must be deterministic.
+Эффекты должны быть детерминированными.
 
-Effects must not require free text input.
+Эффекты не должны требовать свободного ввода текста.
 
-Effects must not depend on random chance in the draft MVP.
+Эффекты не должны зависеть от случайности в draft MVP.
 
-## Game state
+## Состояние игры
 
-The draft MVP game state may be in memory.
+Game state в draft MVP может храниться в памяти.
 
-State should track:
+Состояние должно отслеживать:
 
 - loaded scenario id;
 - opened participants;
@@ -244,13 +244,13 @@ State should track:
 - selected verdict;
 - game finished flag.
 
-The state is recalculated after each click.
+Состояние пересчитывается после каждого клика.
 
-## Validation
+## Валидация
 
-The engine must validate scenario data before play.
+Engine должен валидировать данные сценария до начала игры.
 
-Validation should check:
+Проверка должна включать:
 
 - required top-level sections exist;
 - every referenced id exists;
@@ -264,25 +264,25 @@ Validation should check:
 - all condition/effect types are supported;
 - no arbitrary code is present in conditions.
 
-The parser must not invent missing content.
+Парсер не должен придумывать отсутствующий контент.
 
-If the scenario is broken, it should show a clear error.
+Если сценарий сломан, он должен показать понятную ошибку.
 
-## Solvability
+## Решаемость
 
-A scenario must be solvable by available clicks.
+Сценарий должен решаться доступными кликами.
 
-The player must be able to discover enough information to choose the correct verdict.
+Игрок должен иметь возможность узнать достаточно информации, чтобы выбрать правильный вердикт.
 
-The final explanation must not introduce new facts that were unavailable during play.
+Финальное объяснение не должно добавлять новых фактов, которых не было во время игры.
 
-Future validators should check that key evidence and key contradictions are reachable.
+Будущие валидаторы должны проверять, что ключевые доказательства и ключевые противоречия достижимы.
 
-## First implementation boundary
+## Граница первой реализации
 
-The first implementation should support the smallest useful version of this engine.
+Первая реализация должна поддерживать минимально полезную версию этого engine.
 
-It should support:
+Она должна поддерживать:
 
 - participants;
 - evidence;
@@ -292,7 +292,7 @@ It should support:
 - verdicts;
 - final explanation.
 
-It should not support yet:
+Пока не нужно поддерживать:
 
 - OpenAI API;
 - images;
@@ -303,9 +303,9 @@ It should not support yet:
 - free text input;
 - custom code in scenario files.
 
-## Future expansion
+## Будущее расширение
 
-Later versions may add:
+Позднее версии могут добавить:
 
 - difficulty rules;
 - anti-repeat tags;

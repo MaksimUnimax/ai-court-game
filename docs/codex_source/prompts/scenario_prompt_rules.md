@@ -2,59 +2,59 @@
 
 STATUS: draft_1_appendable
 
-## Purpose
+## Назначение
 
-This document collects rules and conditions for creating court-case scenarios.
+Этот документ собирает правила и условия для создания сценариев судебных дел.
 
-These rules will later become the base for the GPT/API prompt.
+Позднее эти правила станут основой GPT/API prompt.
 
-For now, ChatGPT manually creates scenario documents and the user tests them in the draft MVP.
+Пока ChatGPT вручную создаёт сценарные документы, а пользователь тестирует их в draft MVP.
 
-The document should grow as scenario problems are discovered.
+Документ должен пополняться по мере того, как выявляются проблемы сценариев.
 
-## Core rule
+## Основное правило
 
-A scenario must be a solvable puzzle.
+Сценарий должен быть решаемой головоломкой.
 
-It is not enough for the case to be dramatic, funny or strange.
+Недостаточно, чтобы дело было просто драматичным, смешным или странным.
 
-The player must be able to reach the correct verdict by clicking through participants, questions and evidence.
+Игрок должен иметь возможность прийти к правильному вердикту, кликая по участникам, вопросам и доказательствам.
 
-## Required scenario qualities
+## Обязательные качества сценария
 
-Every scenario must have:
+У каждого сценария должно быть:
 
-- a clear hidden truth;
-- a correct verdict;
-- enough evidence to support the correct verdict;
-- at least one meaningful contradiction or clue;
-- no contradiction that makes the case logically impossible;
-- no solution that requires information unavailable to the player;
-- no reliance on free text input;
-- no need for real-world legal knowledge;
-- no hidden author-only reasoning.
+- чёткая скрытая истина;
+- правильный вердикт;
+- достаточно доказательств, чтобы поддержать правильный вердикт;
+- хотя бы одно значимое противоречие или подсказка;
+- отсутствие противоречий, делающих дело логически невозможным;
+- отсутствие решения, которое требует информации, недоступной игроку;
+- отсутствие зависимости от свободного текста;
+- отсутствие необходимости в реальных юридических знаниях;
+- отсутствие скрытого авторского reasoning.
 
-## Draft MVP limitations
+## Ограничения draft MVP
 
-For the first draft MVP:
+Для первого draft MVP:
 
-- no images;
-- no OpenAI API;
-- no generated portraits;
-- no generated evidence illustrations;
-- no user authorization;
-- no database;
-- no witnesses by default;
-- no free text input;
-- all gameplay through clicks.
+- без изображений;
+- без OpenAI API;
+- без сгенерированных портретов;
+- без сгенерированных иллюстраций доказательств;
+- без авторизации пользователя;
+- без базы данных;
+- без свидетелей по умолчанию;
+- без свободного текстового ввода;
+- весь геймплей через клики.
 
-## Scenario structure rule
+## Правило структуры сценария
 
-A scenario must be structured so a script can place content into UI blocks.
+Сценарий должен быть структурирован так, чтобы скрипт мог раскладывать контент по UI-блокам.
 
-The scenario must not be a plain story only.
+Сценарий не должен быть просто текстовой историей.
 
-It must include explicit sections for:
+Он должен включать явные секции для:
 
 - metadata;
 - participants;
@@ -66,64 +66,64 @@ It must include explicit sections for:
 - correct verdict;
 - final explanation.
 
-## Case type rules
+## Правила типов дел
 
-Supported case types for draft MVP:
+Поддерживаемые типы дел для draft MVP:
 
 1. Criminal case.
 2. Dispute between two people.
 
-Criminal case must use verdict options:
+Уголовное дело должно использовать варианты вердикта:
 
 - guilty;
 - not guilty.
 
-Dispute case must use verdict options:
+Спор между двумя людьми должен использовать варианты вердикта:
 
 - side A is right;
 - side B is right.
 
-## Participant rules
+## Правила участников
 
-For a criminal case, default participants are:
+Для уголовного дела участники по умолчанию:
 
 - accused person;
 - prosecutor;
 - defense lawyer.
 
-For a dispute case, default participants are:
+Для спора между двумя людьми участники по умолчанию:
 
 - side A;
 - side B.
 
-No witnesses in the first draft MVP unless explicitly added later.
+Свидетели в первом draft MVP не нужны, если они не добавлены позже отдельно.
 
-## Question rules
+## Правила вопросов
 
-Questions must be predefined.
+Вопросы должны быть заранее определены.
 
-The player chooses questions by clicking buttons.
+Игрок выбирает вопросы кликом по кнопкам.
 
-Each question belongs to a participant.
+Каждый вопрос принадлежит участнику.
 
-Each answer must be prepared in advance.
+Каждый ответ должен быть подготовлен заранее.
 
-Answers may:
+Ответы могут:
 
-- reveal a contradiction;
-- confirm an alibi;
-- weaken an alibi;
-- unlock evidence;
-- unlock another question;
-- mislead the player fairly.
+- раскрывать противоречие;
+- подтверждать алиби;
+- ослаблять алиби;
+- разблокировать доказательство;
+- разблокировать другой вопрос;
+- честно вводить игрока в заблуждение.
 
-Answers must not require the player to type.
+Ответы не должны требовать ввода текста от игрока.
 
-## Evidence rules
+## Правила доказательств
 
-Evidence must be text-only in the first draft MVP.
+В первом draft MVP доказательства должны быть текстовыми.
 
-Each evidence item must include:
+Каждое доказательство должно включать:
 
 - id;
 - title;
@@ -134,58 +134,58 @@ Each evidence item must include:
 - what it proves;
 - whether it is key evidence.
 
-Evidence must matter to the puzzle.
+Доказательства должны иметь значение для головоломки.
 
-Decorative evidence should be avoided.
+Декоративных доказательств следует избегать.
 
-## Unlock rules
+## Правила разблокировки
 
-Unlock rules must be deterministic.
+Правила разблокировки должны быть детерминированными.
 
-Good unlock conditions:
+Хорошие условия разблокировки:
 
-- after asking a specific question;
-- after opening a specific evidence item;
-- after asking two specific questions;
-- after opening evidence and then asking a related question.
+- после заданного конкретного вопроса;
+- после открытия конкретного доказательства;
+- после двух конкретных вопросов;
+- после открытия доказательства и затем связанного вопроса.
 
-Bad unlock conditions:
+Плохие условия разблокировки:
 
-- random chance;
-- hidden timer;
+- случайность;
+- скрытый таймер;
 - author-only trigger;
-- free text phrase;
-- unclear player action.
+- свободная текстовая фраза;
+- неясное действие игрока.
 
-## Fairness rules
+## Правила честности
 
-The scenario is unfair if:
+Сценарий нечестный, если:
 
-- the correct answer depends on information not shown;
-- two verdicts are equally supported;
-- the final explanation adds new facts that were not available;
-- the evidence contradicts the hidden truth;
-- the player must guess the author's intention;
-- a participant gives an answer that breaks the established timeline.
+- правильный ответ зависит от информации, которой не было показано;
+- два вердикта одинаково обоснованы;
+- финальное объяснение добавляет новые факты, которых не было;
+- доказательства противоречат скрытой истине;
+- игрок должен угадывать намерение автора;
+- ответ участника ломает установленную временную линию.
 
-## Final explanation rules
+## Правила финального объяснения
 
-After verdict, the scenario must explain:
+После вердикта сценарий должен объяснять:
 
-- correct verdict;
-- what really happened;
-- key evidence;
-- key contradiction;
-- why the selected wrong verdict is wrong;
-- what the player should have noticed.
+- правильный вердикт;
+- что произошло на самом деле;
+- ключевое доказательство;
+- ключевое противоречие;
+- почему выбранный неправильный вердикт неверен;
+- что игрок должен был заметить.
 
-## Future API prompt direction
+## Будущее API-направление
 
-When GPT/API generation is added later, the prompt must require structured output.
+Когда позже будет добавлена GPT/API generation, prompt должен требовать структурированный вывод.
 
-The future GPT response should be strict JSON.
+Future GPT response should be strict JSON.
 
-The future GPT response should include:
+Future GPT response should include:
 
 - scenario metadata;
 - anti-repeat tags;
@@ -199,11 +199,11 @@ The future GPT response should include:
 - solution explanation;
 - validation checklist.
 
-The future GPT prompt must explicitly forbid unsolvable cases.
+Будущий GPT prompt должен явно запрещать неразрешимые случаи.
 
-## Open questions to refine later
+## Вопросы для уточнения позже
 
-These rules will be refined after playtesting:
+Эти правила будут уточняться после playtesting:
 
 - best scenario JSON format;
 - number of evidence items per difficulty;
@@ -215,11 +215,11 @@ These rules will be refined after playtesting:
 
 ## Addendum — Scenario graph rules
 
-A scenario must be generated as data for a universal scenario graph engine.
+Сценарий должен генерироваться как data для универсального scenario graph engine.
 
-The scenario must not assume a fixed dialogue order hardcoded in the app.
+Сценарий не должен предполагать фиксированный порядок диалогов, hardcoded в app.
 
-The scenario must explicitly define:
+Сценарий должен явно определять:
 
 - detailed participants;
 - relationships between participants;
@@ -234,9 +234,9 @@ The scenario must explicitly define:
 - correct verdict;
 - final explanation.
 
-Every participant must be more than a role label.
+Каждый участник должен быть больше, чем просто label роли.
 
-Participant data should include:
+Данные участника должны включать:
 
 - name;
 - role;
@@ -247,12 +247,12 @@ Participant data should include:
 - what the participant knows;
 - what the participant hides or misrepresents if relevant.
 
-Every dialogue action must define when it is available and what it changes.
+Каждое dialogue action должно определять, когда оно доступно и что оно меняет.
 
-Every evidence item must define when it is available and what it proves.
+Каждое evidence item должно определять, когда оно доступно и что оно доказывает.
 
-The scenario must not require new code for a specific case.
+Сценарий не должен требовать нового code для конкретного случая.
 
-The scenario must be executable by the same engine as every other case.
+Сценарий должен исполняться тем же engine, что и любой другой кейс.
 
-The future GPT prompt must require the model to output scenario graph data, not a plain story.
+Будущий GPT prompt должен требовать от модели выводить scenario graph data, а не обычный рассказ.

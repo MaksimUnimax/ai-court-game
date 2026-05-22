@@ -1,16 +1,15 @@
 # AI Court Game
 
-AI Court Game is a planned browser game where the player acts as a judge and resolves AI-generated court cases.
+AI Court Game — запланированная браузерная игра, в которой игрок выступает в роли судьи и разбирает сгенерированные AI судебные дела.
 
-This repository is currently in documentation/bootstrap stage.
+Сейчас репозиторий находится на стадии документации и bootstrap.
 
-Current repository:
+Текущий репозиторий:
 
 - Public repo: `https://github.com/MaksimUnimax/ai-court-game`
-- Planned local root: `/opt/ai-court-game`
-- Documentation root: `docs/codex_source/**`
+- Планируемый локальный корень: `/opt/ai-court-game`
+- Корень документации: `docs/codex_source/**`
 
-No application code has been created yet.
+Приложение пока не создано.
 
-ТЗ and roadmap will be written in the next steps.
-
+ТЗ и roadmap будут написаны на следующих шагах.

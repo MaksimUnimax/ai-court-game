@@ -1,6 +1,5 @@
-# Context
+# Контекст
 
-Project memory and dialogue context live here.
+Здесь хранятся память проекта и контекст диалога.
 
-Use exact files only when the prompt requires them.
-
+Используйте только точные файлы, когда этого требует prompt.

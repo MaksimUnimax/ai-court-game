@@ -1,4 +1,3 @@
 # Roadmap
 
-This directory will hold roadmap memory.
-
+В этом каталоге будет храниться память roadmap.

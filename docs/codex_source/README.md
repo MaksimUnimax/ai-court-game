@@ -1,10 +1,9 @@
-# AI Court Game Codex source docs
+# Документация Codex для AI Court Game
 
-This directory is the project documentation layer for AI Court Game.
+Этот каталог содержит слой проектной документации AI Court Game.
 
-Codex must not read all files here by default.
+Codex не должен читать все файлы здесь по умолчанию.
 
-ChatGPT must name exact files in `DOCS_TO_READ` for each technical task.
+Для каждой технической задачи ChatGPT должен перечислять точные файлы в `DOCS_TO_READ`.
 
-ТЗ, roadmap, module map and schemas will be filled in later steps.
-
+ТЗ, roadmap, module map и schemas будут заполнены на следующих шагах.

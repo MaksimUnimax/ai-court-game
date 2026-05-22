@@ -1,4 +1,3 @@
-# Schemas
+# Схемы
 
-This directory will hold schema documentation.
-
+В этом каталоге будет храниться документация по схемам.

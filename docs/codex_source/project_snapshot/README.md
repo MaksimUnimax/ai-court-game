@@ -1,4 +1,3 @@
-# Project Snapshot
+# Снимки проекта
 
-This directory will hold point-in-time project snapshot documentation.
-
+В этом каталоге будет храниться документация точечных снимков состояния проекта.
