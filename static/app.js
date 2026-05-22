@@ -7,6 +7,14 @@ const state = {
   selectedParticipantId: null,
   selectedEvidenceId: null,
   dialogueHistoryByParticipant: new Map(),
+  imageViewer: {
+    open: false,
+    assetId: null,
+    title: "",
+    alt: "",
+    url: "",
+    scale: 1,
+  },
 };
 
 const dom = {
@@ -23,9 +31,23 @@ const dom = {
   eventLogPanel: document.querySelector("#event-log-panel"),
   verdictPanel: document.querySelector("#verdict-panel"),
   finalExplanationPanel: document.querySelector("#final-explanation-panel"),
+  imageViewerModal: document.querySelector("#image-viewer-modal"),
+  imageViewerCloseBtn: document.querySelector("#image-viewer-close-btn"),
+  imageViewerZoomOutBtn: document.querySelector("#image-viewer-zoom-out-btn"),
+  imageViewerResetBtn: document.querySelector("#image-viewer-reset-btn"),
+  imageViewerZoomInBtn: document.querySelector("#image-viewer-zoom-in-btn"),
+  imageViewerTitle: document.querySelector("#image-viewer-title"),
+  imageViewerAlt: document.querySelector("#image-viewer-alt"),
+  imageViewerScale: document.querySelector("#image-viewer-scale"),
+  imageViewerImage: document.querySelector("#image-viewer-image"),
+  imageViewerViewport: document.querySelector("#image-viewer-viewport"),
 };
 
 dom.startScenarioBtn.disabled = true;
+
+const IMAGE_VIEWER_MIN_SCALE = 0.5;
+const IMAGE_VIEWER_MAX_SCALE = 4;
+const IMAGE_VIEWER_STEP = 0.2;
 
 const CONDITION_HANDLERS = {
   always: () => true,
@@ -91,6 +113,7 @@ function renderValidation(message, isError = false) {
 }
 
 function clearLoadedPackage() {
+  closeImageViewer();
   if (state.loadedImageRegistry && Array.isArray(state.loadedImageRegistry.urls)) {
     for (const url of state.loadedImageRegistry.urls) {
       URL.revokeObjectURL(url);
@@ -200,6 +223,83 @@ function getVisualAssetsForDisplay() {
   );
 }
 
+function clampScale(value) {
+  return Math.min(IMAGE_VIEWER_MAX_SCALE, Math.max(IMAGE_VIEWER_MIN_SCALE, value));
+}
+
+function getVisualAssetById(assetId) {
+  return getVisualAssets().find((asset) => asset.id === assetId) || null;
+}
+
+function updateBodyScrollLock() {
+  document.body.classList.toggle("modal-open", state.imageViewer.open);
+}
+
+function renderImageViewer() {
+  if (!dom.imageViewerModal) {
+    return;
+  }
+  if (!state.imageViewer.open || !state.imageViewer.url) {
+    dom.imageViewerModal.hidden = true;
+    dom.imageViewerModal.setAttribute("aria-hidden", "true");
+    updateBodyScrollLock();
+    return;
+  }
+
+  dom.imageViewerModal.hidden = false;
+  dom.imageViewerModal.setAttribute("aria-hidden", "false");
+  dom.imageViewerTitle.textContent = state.imageViewer.title || "Изображение";
+  dom.imageViewerAlt.textContent = state.imageViewer.alt || "Изображение можно увеличить и внимательно рассмотреть.";
+  dom.imageViewerImage.src = state.imageViewer.url;
+  dom.imageViewerImage.alt = state.imageViewer.alt || state.imageViewer.title || "Иллюстрация";
+  dom.imageViewerImage.style.transform = `scale(${state.imageViewer.scale})`;
+  dom.imageViewerScale.textContent = `${Math.round(state.imageViewer.scale * 100)}%`;
+  updateBodyScrollLock();
+}
+
+function closeImageViewer() {
+  state.imageViewer.open = false;
+  state.imageViewer.assetId = null;
+  state.imageViewer.title = "";
+  state.imageViewer.alt = "";
+  state.imageViewer.url = "";
+  state.imageViewer.scale = 1;
+  if (dom.imageViewerImage) {
+    dom.imageViewerImage.removeAttribute("src");
+    dom.imageViewerImage.alt = "";
+    dom.imageViewerImage.style.transform = "scale(1)";
+  }
+  renderImageViewer();
+}
+
+function openImageViewer(assetId) {
+  const asset = getVisualAssetById(assetId);
+  const url = asset ? getVisualAssetImageUrl(asset) : null;
+  if (!asset || !url) {
+    return;
+  }
+  state.imageViewer.open = true;
+  state.imageViewer.assetId = asset.id;
+  state.imageViewer.title = asset.title || asset.alt || "Иллюстрация";
+  state.imageViewer.alt = asset.alt || asset.title || "Иллюстрация";
+  state.imageViewer.url = url;
+  state.imageViewer.scale = 1;
+  renderImageViewer();
+  window.requestAnimationFrame(() => {
+    if (dom.imageViewerCloseBtn) {
+      dom.imageViewerCloseBtn.focus({ preventScroll: true });
+    }
+  });
+}
+
+function setImageViewerScale(nextScale) {
+  if (!state.imageViewer.open) {
+    return;
+  }
+  state.imageViewer.scale = clampScale(nextScale);
+  renderImageViewer();
+}
+
 function renderLoadedPackageStatus(statusText, isError = false) {
   const source = state.loadedScenarioMeta;
   if (!source) {
@@ -252,7 +352,6 @@ function getVisualAssetMatchCount(scenario, registry) {
 }
 
 async function loadCasePackage(files, sourceLabel) {
-  clearLoadedPackage();
   const fileList = Array.from(files || []);
   const jsonFiles = fileList.filter(isJsonFile);
   const imageFiles = fileList.filter(isSupportedImageFile);
@@ -290,6 +389,7 @@ async function loadCasePackage(files, sourceLabel) {
     }
 
     if (state.loadedImageRegistry) {
+      closeImageViewer();
       revokeImageRegistry(state.loadedImageRegistry);
     }
     state.loadedScenario = scenario;
@@ -326,9 +426,17 @@ function renderAssetMedia(asset, className = "visual-asset-media", fallbackText 
   const url = getVisualAssetImageUrl(asset);
   if (url) {
     return `
-      <div class="${className}">
-        <img src="${escapeHtml(url)}" alt="${escapeHtml(asset.alt || asset.title || "Иллюстрация")}" />
-      </div>
+      <button
+        type="button"
+        class="image-view-trigger"
+        data-visual-asset-id="${escapeHtml(asset.id)}"
+        aria-label="${escapeHtml(`Открыть крупно: ${asset.title || asset.alt || "Иллюстрация"}`)}"
+      >
+        <div class="${className}">
+          <img src="${escapeHtml(url)}" alt="${escapeHtml(asset.alt || asset.title || "Иллюстрация")}" />
+        </div>
+        <span class="image-view-trigger-label">Открыть крупно</span>
+      </button>
     `;
   }
 
@@ -915,24 +1023,78 @@ dom.startScenarioBtn.addEventListener("click", async () => {
   }
 });
 
+if (dom.imageViewerModal) {
+  dom.imageViewerModal.addEventListener("click", (event) => {
+    if (event.target === dom.imageViewerModal || event.target.matches("[data-image-viewer-close]")) {
+      closeImageViewer();
+    }
+  });
+}
+
+if (dom.imageViewerCloseBtn) {
+  dom.imageViewerCloseBtn.addEventListener("click", closeImageViewer);
+}
+
+if (dom.imageViewerZoomInBtn) {
+  dom.imageViewerZoomInBtn.addEventListener("click", () => setImageViewerScale(state.imageViewer.scale + IMAGE_VIEWER_STEP));
+}
+
+if (dom.imageViewerZoomOutBtn) {
+  dom.imageViewerZoomOutBtn.addEventListener("click", () => setImageViewerScale(state.imageViewer.scale - IMAGE_VIEWER_STEP));
+}
+
+if (dom.imageViewerResetBtn) {
+  dom.imageViewerResetBtn.addEventListener("click", () => setImageViewerScale(1));
+}
+
+if (dom.imageViewerViewport) {
+  dom.imageViewerViewport.addEventListener(
+    "wheel",
+    (event) => {
+      if (!state.imageViewer.open) {
+        return;
+      }
+      event.preventDefault();
+      const direction = event.deltaY < 0 ? 1 : -1;
+      setImageViewerScale(state.imageViewer.scale + direction * IMAGE_VIEWER_STEP);
+    },
+    { passive: false }
+  );
+}
+
+document.addEventListener("keydown", (event) => {
+  if (!state.imageViewer.open) {
+    return;
+  }
+  if (event.key === "Escape") {
+    closeImageViewer();
+  }
+});
+
 document.addEventListener("click", (event) => {
-  const participantId = event.target.getAttribute("data-participant-id");
+  const targetElement = event.target instanceof Element ? event.target : null;
+  const visualAssetTrigger = targetElement?.closest("[data-visual-asset-id]");
+  if (visualAssetTrigger && state.loadedScenario) {
+    openImageViewer(visualAssetTrigger.getAttribute("data-visual-asset-id"));
+  }
+
+  const participantId = targetElement?.getAttribute("data-participant-id");
   if (participantId) {
     state.selectedParticipantId = participantId;
     renderAll();
   }
 
-  const evidenceId = event.target.getAttribute("data-evidence-id");
+  const evidenceId = targetElement?.getAttribute("data-evidence-id");
   if (evidenceId && state.engine) {
     handleEvidenceClick(evidenceId);
   }
 
-  const actionId = event.target.getAttribute("data-action-id");
+  const actionId = targetElement?.getAttribute("data-action-id");
   if (actionId && state.engine) {
     handleDialogueClick(actionId);
   }
 
-  const verdictId = event.target.getAttribute("data-verdict-id");
+  const verdictId = targetElement?.getAttribute("data-verdict-id");
   if (verdictId && state.engine) {
     handleVerdictClick(verdictId);
   }

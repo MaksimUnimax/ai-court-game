@@ -94,6 +94,34 @@
       </main>
     </div>
 
+    <div id="image-viewer-modal" class="image-viewer-modal" hidden aria-hidden="true">
+      <div class="image-viewer-backdrop" data-image-viewer-close></div>
+      <section
+        class="image-viewer-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="image-viewer-title"
+      >
+        <header class="image-viewer-header">
+          <div>
+            <p class="image-viewer-eyebrow">Просмотр иллюстрации</p>
+            <h2 id="image-viewer-title">Изображение</h2>
+            <p id="image-viewer-alt" class="muted">Изображение можно увеличить и внимательно рассмотреть.</p>
+          </div>
+          <button type="button" id="image-viewer-close-btn">Закрыть</button>
+        </header>
+        <div class="image-viewer-toolbar" aria-label="Управление масштабом изображения">
+          <button type="button" id="image-viewer-zoom-out-btn">Уменьшить</button>
+          <button type="button" id="image-viewer-reset-btn">Сбросить масштаб</button>
+          <button type="button" id="image-viewer-zoom-in-btn">Увеличить</button>
+          <div id="image-viewer-scale" class="pill">100%</div>
+        </div>
+        <div id="image-viewer-viewport" class="image-viewer-viewport">
+          <img id="image-viewer-image" alt="" />
+        </div>
+      </section>
+    </div>
+
     <script src="/app.js"></script>
   </body>
 </html>
