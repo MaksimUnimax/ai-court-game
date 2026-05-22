@@ -11,7 +11,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 STATIC_DIR = REPO_ROOT / "static"
 SCENARIO_DIR = REPO_ROOT / "scenarios"
 DEMO_SCENARIO_PATH = SCENARIO_DIR / "demo_case.json"
-HOST = "127.0.0.1"
+HOST = "0.0.0.0"
 PORT = 8000
 
 REQUIRED_TOP_LEVEL_KEYS = {
