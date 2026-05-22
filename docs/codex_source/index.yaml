@@ -47,6 +47,8 @@ project_docs:
     status: "placeholder"
   - path: "docs/codex_source/project/project_overview.md"
     status: "draft_1"
+  - path: "docs/codex_source/project/scenario_engine_design.md"
+    status: "draft_1"
   - path: "docs/codex_source/project/technical_spec_draft.md"
     status: "draft_1"
   - path: "docs/codex_source/project/draft_mvp_scope.md"
@@ -66,5 +68,5 @@ current_state:
   product_tz_written: true
   roadmap_written: true
   application_code_created: false
-  active_blocker: "draft_mvp_docs_ready_for_first_manual_scenario_and_scaffold"
-  next_exact_run: "create_first_manual_scenario_schema_or_implement_import_scaffold"
+  active_blocker: "scenario_engine_design_ready_for_first_scaffold"
+  next_exact_run: "implement_first_data_driven_scenario_scaffold"

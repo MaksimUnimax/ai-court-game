@@ -1,6 +1,6 @@
-version: 0.2
+version: 0.3
 project: ai-court-game
 file: docs/codex_source/context/current_dialogue_context.md
 append_only: true
-last_append_id: CTX-2026-05-22-001
-status: draft_mvp_context_started
+last_append_id: CTX-2026-05-22-002
+status: scenario_graph_engine_requirement_recorded

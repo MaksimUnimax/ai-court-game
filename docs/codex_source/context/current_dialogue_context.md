@@ -26,3 +26,24 @@ The project must include a document where rules and conditions for future GPT/AP
 
 ТЗ and roadmap for this draft MVP are now the current priority.
 
+## CTX-2026-05-22-002 — Data-driven scenario graph engine requirement
+
+Source: user-approved project direction in chat.
+
+The user clarified that scenarios must not be implemented as hardcoded dialogue frames.
+
+The user clarified that the project must not require new code for every new case.
+
+The game must use a universal data-driven scenario engine.
+
+Participants must be detailed entities, not simple labels.
+
+Participant data must support names, roles, jobs or positions, relation to the case, and relationships/dependencies between participants.
+
+Scenario data must define dialogue order, question availability, response dependencies, evidence dependencies, unlock logic, action effects and verdict flow.
+
+The script must not merely distribute text by roles.
+
+The script must interpret the full scenario graph and build the case logic from the scenario document.
+
+This architecture decision must be reflected before implementation.

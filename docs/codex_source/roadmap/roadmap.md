@@ -123,3 +123,30 @@ Future topics:
 - deployment.
 
 This block is future work and must not be implemented in the draft MVP.
+
+## Roadmap block R006 — Data-driven scenario graph engine design
+
+Goal:
+
+Define and implement the universal scenario engine approach before building the first playable scaffold.
+
+Why:
+
+The game must not use hardcoded dialogue frames or custom code per case. Each case must be described by data, and the engine must execute that data.
+
+Work:
+
+- document the scenario graph engine;
+- define participants as detailed entities;
+- define participant relationships;
+- define dialogue actions;
+- define evidence actions;
+- define conditions;
+- define effects;
+- define game state;
+- define validation rules;
+- update scenario prompt rules.
+
+Expected result:
+
+The implementation can build different case flows from scenario data instead of hardcoded dialogue order.

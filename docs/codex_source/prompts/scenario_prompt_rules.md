@@ -213,3 +213,46 @@ These rules will be refined after playtesting:
 - how to prevent repeated plots;
 - how to convert manual scenario documents into GPT API prompts.
 
+## Addendum — Scenario graph rules
+
+A scenario must be generated as data for a universal scenario graph engine.
+
+The scenario must not assume a fixed dialogue order hardcoded in the app.
+
+The scenario must explicitly define:
+
+- detailed participants;
+- relationships between participants;
+- dialogue actions;
+- evidence actions;
+- availability conditions;
+- effects after actions;
+- unlock dependencies;
+- discovered facts;
+- contradictions;
+- verdict options;
+- correct verdict;
+- final explanation.
+
+Every participant must be more than a role label.
+
+Participant data should include:
+
+- name;
+- role;
+- job or position;
+- relation to the case;
+- relation to other participants;
+- public motive or conflict;
+- what the participant knows;
+- what the participant hides or misrepresents if relevant.
+
+Every dialogue action must define when it is available and what it changes.
+
+Every evidence item must define when it is available and what it proves.
+
+The scenario must not require new code for a specific case.
+
+The scenario must be executable by the same engine as every other case.
+
+The future GPT prompt must require the model to output scenario graph data, not a plain story.

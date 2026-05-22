@@ -171,3 +171,57 @@ Later versions may add:
 
 These are not part of the draft MVP.
 
+## Addendum — Data-driven scenario graph engine
+
+The draft MVP must not use hardcoded dialogue frames.
+
+The draft MVP must use a universal data-driven scenario graph engine.
+
+The scenario document controls:
+
+- participants;
+- participant details;
+- relationships between participants;
+- dialogue actions;
+- evidence actions;
+- availability conditions;
+- effects after clicks;
+- unlock rules;
+- facts;
+- contradictions;
+- verdict options;
+- final explanation.
+
+The code must implement universal mechanics only.
+
+The code must not contain case-specific logic.
+
+A new case must be added by changing scenario data, not by writing new application code.
+
+The first implementation should support simple deterministic conditions and effects.
+
+Initial condition groups:
+
+- always;
+- all;
+- any;
+- not.
+
+Initial condition types:
+
+- question_asked;
+- evidence_opened;
+- fact_discovered;
+- contradiction_found;
+- action_done;
+- verdict_enabled.
+
+Initial effect types:
+
+- mark_action_done;
+- unlock_question;
+- unlock_evidence;
+- discover_fact;
+- mark_contradiction;
+- show_note;
+- enable_verdict.
