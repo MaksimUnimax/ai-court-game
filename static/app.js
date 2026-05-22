@@ -3,6 +3,7 @@ const state = {
   engine: null,
   selectedParticipantId: null,
   selectedEvidenceId: null,
+  dialogueHistoryByParticipant: new Map(),
 };
 
 const dom = {
@@ -16,7 +17,7 @@ const dom = {
   relationshipsPanel: document.querySelector("#relationships-panel"),
   evidencePanel: document.querySelector("#evidence-panel"),
   evidenceDetailPanel: document.querySelector("#evidence-detail-panel"),
-  actionsPanel: document.querySelector("#actions-panel"),
+  dialoguePanels: document.querySelector("#dialogue-panels"),
   eventLogPanel: document.querySelector("#event-log-panel"),
   verdictPanel: document.querySelector("#verdict-panel"),
   finalExplanationPanel: document.querySelector("#final-explanation-panel"),
@@ -139,6 +140,33 @@ function applyEffects(effects, context) {
   }
 }
 
+function getDialogueHistory(participantId) {
+  return state.dialogueHistoryByParticipant.get(participantId) || [];
+}
+
+function appendDialogueHistory(participantId, entry) {
+  const history = getDialogueHistory(participantId);
+  history.push(entry);
+  state.dialogueHistoryByParticipant.set(participantId, history);
+}
+
+function summarizeDialogueEffects(effects) {
+  return (effects || [])
+    .map((effect) => {
+      if (effect.type === "show_note") {
+        return effect.note || null;
+      }
+      if (effect.type === "discover_fact") {
+        return effect.label || null;
+      }
+      if (effect.type === "mark_contradiction") {
+        return effect.label || null;
+      }
+      return null;
+    })
+    .filter(Boolean);
+}
+
 function isDialogueVisible(action) {
   return (
     state.engine.unlockedQuestions.has(action.id) ||
@@ -203,19 +231,15 @@ function renderParticipants() {
           <h3>${escapeHtml(participant.name)}</h3>
           <div class="pill">${escapeHtml(participant.role)}</div>
           <p class="muted">${escapeHtml(participant.position)}</p>
-          <button type="button" data-participant-id="${escapeHtml(participant.id)}">Изучить участника</button>
+          <button type="button" data-participant-id="${escapeHtml(participant.id)}">Открыть диалог</button>
         </div>
       `;
     })
     .join("");
 
-  if (!state.selectedParticipantId && state.scenario.participants.length) {
-    state.selectedParticipantId = state.scenario.participants[0].id;
-  }
-
   const participant = state.scenario.participants.find((item) => item.id === state.selectedParticipantId);
   if (!participant) {
-    dom.participantDetailPanel.textContent = "Выберите карточку участника, чтобы посмотреть детали.";
+    dom.participantDetailPanel.textContent = "Выберите участника, чтобы начать диалог.";
     return;
   }
   dom.participantDetailPanel.innerHTML = `
@@ -291,52 +315,108 @@ function renderEvidence() {
   `;
 }
 
-function renderActions() {
-  const groups = state.scenario.participants.map((participant) => {
-    const actions = state.scenario.dialogue_actions.filter(
-      (action) => action.participant_id === participant.id && isDialogueVisible(action)
-    );
-    return { participant, actions };
-  });
-  const visibleGroups = groups.filter((group) => group.actions.length);
-  if (!visibleGroups.length) {
-    dom.actionsPanel.textContent = "Диалоговые действия пока недоступны.";
-    dom.actionsPanel.className = "action-groups empty-state";
-    return;
-  }
-
+function renderDialoguePanels() {
   const selectedParticipantId = state.selectedParticipantId;
-  const orderedGroups = visibleGroups.sort((a, b) => {
-    if (a.participant.id === selectedParticipantId) return -1;
-    if (b.participant.id === selectedParticipantId) return 1;
-    return 0;
-  });
+  const participantPanels = state.scenario.participants
+    .map((participant) => {
+      const active = participant.id === selectedParticipantId;
+      const actions = state.scenario.dialogue_actions.filter((action) => action.participant_id === participant.id);
+      const visibleActions = actions.filter(isDialogueVisible);
+      const history = getDialogueHistory(participant.id);
+      const historyHtml = history.length
+        ? history
+            .map(
+              (item) => `
+                <article class="dialogue-history-entry">
+                  <p class="dialogue-label">Вопрос</p>
+                  <p class="dialogue-question">${escapeHtml(item.question)}</p>
+                  <p class="dialogue-label">Ответ</p>
+                  <p class="dialogue-answer">${escapeHtml(item.answer)}</p>
+                  ${
+                    item.notes && item.notes.length
+                      ? `
+                        <div class="dialogue-history-notes">
+                          <p class="dialogue-label">Сопутствующие эффекты</p>
+                          <ul>
+                            ${item.notes.map((note) => `<li>${escapeHtml(note)}</li>`).join("")}
+                          </ul>
+                        </div>
+                      `
+                      : ""
+                  }
+                </article>
+              `
+            )
+            .join("")
+        : `<div class="dialogue-window-hint">Пока в истории этого участника нет реплик.</div>`;
+      const questionHtml = visibleActions.length
+        ? visibleActions
+            .map((action) => {
+              const asked = state.engine.askedQuestions.has(action.id);
+              const enabled = isDialogueAvailable(action);
+              return `
+                <button type="button" class="dialogue-question-button ${asked ? "is-asked" : ""}" data-action-id="${escapeHtml(action.id)}" ${
+                  enabled ? "" : "disabled"
+                }>
+                  ${escapeHtml(asked ? `${action.label} (уже задан)` : action.label)}
+                </button>
+              `;
+            })
+            .join("")
+        : `<div class="dialogue-window-hint">Пока для этого участника нет доступных вопросов.</div>`;
 
-  dom.actionsPanel.className = "action-groups";
-  dom.actionsPanel.innerHTML = orderedGroups
-    .map(
-      (group) => `
-        <div class="action-group">
-          <h3>${escapeHtml(group.participant.name)}</h3>
-          <div class="action-buttons">
-            ${group.actions
-              .map((action) => {
-                const done = state.engine.askedQuestions.has(action.id);
-                const enabled = isDialogueAvailable(action);
-                return `
-                  <button type="button" data-action-id="${escapeHtml(action.id)}" ${
-                    enabled ? "" : "disabled"
-                  }>
-                    ${escapeHtml(done ? `${action.label} (задан)` : action.label)}
-                  </button>
-                `;
-              })
-              .join("")}
+      return `
+        <article class="dialogue-window ${active ? "active" : ""}">
+          <div class="dialogue-window-header">
+            <div>
+              <h3>${escapeHtml(participant.name)}</h3>
+              <p class="muted">${escapeHtml(participant.role)} · ${escapeHtml(participant.position)}</p>
+            </div>
+            <button type="button" data-participant-id="${escapeHtml(participant.id)}">${
+              active ? "Диалог открыт" : "Открыть диалог"
+            }</button>
           </div>
-        </div>
-      `
-    )
+          <p class="dialogue-window-summary">${escapeHtml(participant.relation_to_case)}</p>
+          ${
+            active
+              ? `
+                <div class="dialogue-window-body">
+                  ${
+                    history.length
+                      ? `
+                        <div class="dialogue-history">
+                          ${historyHtml}
+                        </div>
+                      `
+                      : `<div class="dialogue-window-hint">Пока в этом диалоге нет вопросов. Выберите вопрос ниже, чтобы начать разговор.</div>`
+                  }
+                  <div class="dialogue-question-list">
+                    ${questionHtml}
+                  </div>
+                </div>
+              `
+              : `
+                <div class="dialogue-window-preview">
+                  ${history.length ? `<p>В истории уже ${history.length} реплик.</p>` : `<p>Выберите участника, чтобы открыть его диалог.</p>`}
+                </div>
+              `
+          }
+        </article>
+      `;
+    })
     .join("");
+
+  dom.dialoguePanels.className = `dialogue-window-list${selectedParticipantId ? "" : " empty-state"}`;
+  dom.dialoguePanels.innerHTML = `
+    <div class="dialogue-section-hint">
+      ${
+        selectedParticipantId
+          ? "Активен диалог с выбранным участником. Вопросы и ответы показываются внутри его окна."
+          : "Выберите участника, чтобы начать диалог."
+      }
+    </div>
+    ${participantPanels}
+  `;
 }
 
 function renderEventLog() {
@@ -425,9 +505,9 @@ function renderAll() {
   }
   renderCaseIntro();
   renderParticipants();
+  renderDialoguePanels();
   renderRelationships();
   renderEvidence();
-  renderActions();
   renderEventLog();
   renderVerdicts();
   renderFinalExplanation();
@@ -436,8 +516,9 @@ function renderAll() {
 function startScenarioFromResponse(data) {
   state.scenario = data.scenario;
   state.engine = createEngine(data.initial_state);
-  state.selectedParticipantId = data.scenario.participants[0]?.id || null;
+  state.selectedParticipantId = null;
   state.selectedEvidenceId = null;
+  state.dialogueHistoryByParticipant = new Map();
   renderValidation("Сценарий валиден. Кликайте по участникам, доказательствам и вердиктам, чтобы протестировать граф.");
   renderAll();
 }
@@ -447,8 +528,16 @@ function handleDialogueClick(actionId) {
   if (!action || !isDialogueAvailable(action)) {
     return;
   }
+  state.selectedParticipantId = action.participant_id;
   state.engine.askedQuestions.add(action.id);
   state.engine.completedActions.add(action.id);
+  const notes = summarizeDialogueEffects(action.effects);
+  appendDialogueHistory(action.participant_id, {
+    actionId: action.id,
+    question: action.label,
+    answer: action.response_text,
+    notes,
+  });
   state.engine.log.push({
     type: "dialogue",
     text: `${action.label}: ${action.response_text}`,
@@ -482,7 +571,7 @@ function handleVerdictClick(verdictId) {
   }
   state.engine.selectedVerdict = verdict.id;
   state.engine.finished = true;
-    state.engine.log.push({ type: "verdict", text: `Выбран вердикт: ${verdict.label}` });
+  state.engine.log.push({ type: "verdict", text: `Выбран вердикт: ${verdict.label}` });
   renderAll();
 }
 
@@ -511,8 +600,7 @@ document.addEventListener("click", (event) => {
   const participantId = event.target.getAttribute("data-participant-id");
   if (participantId) {
     state.selectedParticipantId = participantId;
-    renderParticipants();
-    renderActions();
+    renderAll();
   }
 
   const evidenceId = event.target.getAttribute("data-evidence-id");

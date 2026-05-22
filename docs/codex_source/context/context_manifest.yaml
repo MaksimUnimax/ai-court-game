@@ -1,6 +1,6 @@
-version: 0.5
+version: 0.6
 project: ai-court-game
 file: docs/codex_source/context/current_dialogue_context.md
 append_only: true
-last_append_id: CTX-2026-05-22-004
-status: scenario_prompt_rules_real_facts_and_unusual_cases_recorded
+last_append_id: CTX-2026-05-22-005
+status: participant_dialogue_windows_required

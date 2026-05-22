@@ -99,15 +99,18 @@ h1 {
 .participants-panel,
 .relationships-panel,
 .evidence-panel,
-.actions-panel,
 .log-panel,
 .verdict-panel,
 .final-panel {
   grid-column: span 6;
 }
 
+.dialogue-panel {
+  grid-column: span 12;
+}
+
 .participants-panel,
-.actions-panel,
+.dialogue-panel,
 .log-panel,
 .final-panel {
   min-height: 320px;
@@ -189,7 +192,7 @@ button:disabled {
 .card-list,
 .relationship-list,
 .log-list,
-.action-groups {
+.dialogue-window-list {
   display: grid;
   gap: 12px;
   margin-top: 14px;
@@ -206,21 +209,98 @@ button:disabled {
 .participant-card button,
 .list-card button,
 .verdict-card button,
-.action-group button {
+.dialogue-window-header button,
+.dialogue-question-list button {
   margin-top: 10px;
 }
 
-.action-group {
+.dialogue-window {
   border-radius: 14px;
   padding: 14px;
   background: rgba(255, 255, 255, 0.62);
+  border: 1px solid rgba(91, 77, 62, 0.16);
 }
 
-.action-buttons {
+.dialogue-window.active {
+  outline: 2px solid rgba(123, 47, 38, 0.34);
+  background: rgba(255, 255, 255, 0.84);
+}
+
+.dialogue-section-hint,
+.dialogue-window-hint,
+.dialogue-window-preview {
+  border-radius: 12px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.58);
+  border: 1px solid rgba(91, 77, 62, 0.16);
+}
+
+.dialogue-window-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.dialogue-window-body {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.dialogue-history {
+  display: grid;
+  gap: 10px;
+}
+
+.dialogue-history-entry {
+  border-radius: 12px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.68);
+  border: 1px solid rgba(91, 77, 62, 0.14);
+}
+
+.dialogue-label {
+  margin: 0;
+  color: var(--accent-strong);
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.dialogue-question {
+  margin: 6px 0 0;
+}
+
+.dialogue-answer {
+  margin: 6px 0 0;
+  color: var(--ink-soft);
+}
+
+.dialogue-history-notes {
+  margin-top: 10px;
+}
+
+.dialogue-history-notes ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  color: var(--ink-soft);
+}
+
+.dialogue-question-list {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
   margin-top: 10px;
+}
+
+.dialogue-question-button {
+  margin-top: 0;
+}
+
+.dialogue-question-button.is-asked {
+  opacity: 0.72;
+  background: linear-gradient(180deg, #9d5f56, #704038);
 }
 
 .pill {
@@ -250,7 +330,7 @@ button:disabled {
   .participants-panel,
   .relationships-panel,
   .evidence-panel,
-  .actions-panel,
+  .dialogue-panel,
   .log-panel,
   .verdict-panel,
   .final-panel {
