@@ -1,6 +1,6 @@
-version: 0.4
+version: 0.5
 project: ai-court-game
 file: docs/codex_source/context/current_dialogue_context.md
 append_only: true
 last_append_id: CTX-2026-05-22-004
-status: russian_language_rule_recorded
+status: scenario_prompt_rules_real_facts_and_unusual_cases_recorded
