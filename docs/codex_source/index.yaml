@@ -16,6 +16,7 @@ directory_map:
   roadmap: "docs/codex_source/roadmap"
   module_map: "docs/codex_source/module_map"
   project: "docs/codex_source/project"
+  prompts: "docs/codex_source/prompts"
   project_snapshot: "docs/codex_source/project_snapshot"
   task_cards: "docs/codex_source/task_cards"
   schemas: "docs/codex_source/schemas"
@@ -44,6 +45,16 @@ rules:
 project_docs:
   - path: "docs/codex_source/project/README.md"
     status: "placeholder"
+  - path: "docs/codex_source/project/project_overview.md"
+    status: "draft_1"
+  - path: "docs/codex_source/project/technical_spec_draft.md"
+    status: "draft_1"
+  - path: "docs/codex_source/project/draft_mvp_scope.md"
+    status: "draft_1"
+  - path: "docs/codex_source/prompts/README.md"
+    status: "draft_1"
+  - path: "docs/codex_source/prompts/scenario_prompt_rules.md"
+    status: "draft_1_appendable"
   - path: "docs/codex_source/project_snapshot/PROJECT_SNAPSHOT.md"
     status: "placeholder"
   - path: "docs/codex_source/roadmap/roadmap.md"
@@ -52,9 +63,8 @@ project_docs:
     status: "placeholder"
 
 current_state:
-  product_tz_written: false
-  roadmap_written: false
+  product_tz_written: true
+  roadmap_written: true
   application_code_created: false
-  active_blocker: "initial_docs_skeleton_only"
-  next_exact_run: "write_product_tz_and_roadmap"
-
+  active_blocker: "draft_mvp_docs_ready_for_first_manual_scenario_and_scaffold"
+  next_exact_run: "create_first_manual_scenario_schema_or_implement_import_scaffold"

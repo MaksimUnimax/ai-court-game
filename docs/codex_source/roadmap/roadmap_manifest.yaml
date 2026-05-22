@@ -1,6 +1,6 @@
-version: 0.1
-files:
-  - path: docs/codex_source/roadmap/roadmap.md
-    mode: append_only
-    status: initial
-
+version: 0.2
+project: ai-court-game
+file: docs/codex_source/roadmap/roadmap.md
+append_only: true
+last_append_id: R005
+status: draft_1_written
