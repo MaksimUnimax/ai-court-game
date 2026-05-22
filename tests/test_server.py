@@ -23,6 +23,12 @@ class ScenarioValidationTests(unittest.TestCase):
         errors = server.validate_scenario(scenario)
         self.assertTrue(any("unknown participant_id" in error for error in errors))
 
+    def test_invalid_visual_asset_reference_is_reported(self):
+        scenario = deepcopy(server.load_demo_scenario())
+        scenario["visual_assets"][0]["target_id"] = "missing_participant"
+        errors = server.validate_scenario(scenario)
+        self.assertTrue(any("unknown target_id" in error for error in errors))
+
 
 if __name__ == "__main__":
     unittest.main()

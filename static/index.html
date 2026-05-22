@@ -12,21 +12,29 @@
         <p class="eyebrow">AI Court Game</p>
         <h1>Каркас сценариев на данных</h1>
         <p class="hero-copy">
-          Загрузите сценарный JSON, проверьте его и запустите кликабельное судебное дело,
-          управляемое универсальными правилами графа.
+          Загрузите пакет дела, проверьте его и запустите кликабельное судебное дело,
+          управляемое универсальными правилами графа и иллюстрациями без явных подсказок.
         </p>
       </header>
 
       <main class="layout">
         <section class="panel loader-panel">
-          <h2>Загрузка сценария</h2>
+          <h2>Загрузка дела</h2>
           <p class="panel-copy">
-            Загрузите JSON-файл сценария или встроенное демо-дело. После старта игра идёт только кликами.
+            Выберите JSON-сценарий и связанные изображения дела одной формой. После старта игра идёт только кликами.
           </p>
           <div class="file-upload-row">
-            <label class="file-upload-label" for="scenario-file-input">Загрузить JSON-сценарий</label>
-            <input id="scenario-file-input" class="scenario-file-input" type="file" accept=".json,application/json" />
-            <p class="file-upload-hint">Файл читается в браузере и не сохраняется на сервер.</p>
+            <label class="file-upload-label" for="case-package-input">Выбрать пакет дела</label>
+            <input
+              id="case-package-input"
+              class="case-package-input"
+              type="file"
+              multiple
+              accept=".json,application/json,image/png,image/jpeg,image/webp"
+            />
+            <p class="file-upload-hint">
+              Выберите один JSON-файл сценария и, при необходимости, изображения дела. Файлы читаются в браузере и не сохраняются на сервер.
+            </p>
           </div>
           <div class="button-row">
             <button id="load-demo-btn" type="button">Загрузить демо-сценарий</button>
@@ -38,6 +46,13 @@
         <section class="panel intro-panel">
           <h2>Введение в дело</h2>
           <div id="case-intro-panel" class="empty-state">Запустите сценарий, чтобы увидеть брифинг дела.</div>
+        </section>
+
+        <section class="panel media-panel">
+          <h2>Иллюстрации дела</h2>
+          <div id="visual-assets-panel" class="visual-assets-grid empty-state">
+            Иллюстрации появятся после загрузки пакета дела.
+          </div>
         </section>
 
         <section class="panel participants-panel">

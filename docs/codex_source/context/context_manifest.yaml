@@ -1,6 +1,6 @@
-version: 0.9
+version: 1.0
 project: ai-court-game
 file: docs/codex_source/context/current_dialogue_context.md
 append_only: true
-last_append_id: CTX-2026-05-22-008
-status: subtle_visual_deduction_and_two_step_image_prompt_flow_recorded
+last_append_id: CTX-2026-05-22-009
+status: case_package_upload_and_visual_assets_recorded

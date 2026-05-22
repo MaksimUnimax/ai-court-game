@@ -2,18 +2,20 @@ const state = {
   scenario: null,
   engine: null,
   loadedScenario: null,
-  loadedScenarioSource: null,
+  loadedScenarioMeta: null,
+  loadedImageRegistry: null,
   selectedParticipantId: null,
   selectedEvidenceId: null,
   dialogueHistoryByParticipant: new Map(),
 };
 
 const dom = {
-  scenarioFileInput: document.querySelector("#scenario-file-input"),
+  casePackageInput: document.querySelector("#case-package-input"),
   loadDemoBtn: document.querySelector("#load-demo-btn"),
   startScenarioBtn: document.querySelector("#start-scenario-btn"),
   validationPanel: document.querySelector("#validation-panel"),
   caseIntroPanel: document.querySelector("#case-intro-panel"),
+  visualAssetsPanel: document.querySelector("#visual-assets-panel"),
   participantsPanel: document.querySelector("#participants-panel"),
   relationshipsPanel: document.querySelector("#relationships-panel"),
   evidencePanel: document.querySelector("#evidence-panel"),
@@ -22,6 +24,8 @@ const dom = {
   verdictPanel: document.querySelector("#verdict-panel"),
   finalExplanationPanel: document.querySelector("#final-explanation-panel"),
 };
+
+dom.startScenarioBtn.disabled = true;
 
 const CONDITION_HANDLERS = {
   always: () => true,
@@ -83,7 +87,19 @@ function createEngine(initialState) {
 
 function renderValidation(message, isError = false) {
   dom.validationPanel.className = `status-panel ${isError ? "status-error" : "status-ok"}`;
-  dom.validationPanel.innerHTML = message;
+  dom.validationPanel.innerHTML = escapeStatusHtml(message);
+}
+
+function clearLoadedPackage() {
+  if (state.loadedImageRegistry && Array.isArray(state.loadedImageRegistry.urls)) {
+    for (const url of state.loadedImageRegistry.urls) {
+      URL.revokeObjectURL(url);
+    }
+  }
+  state.loadedScenario = null;
+  state.loadedScenarioMeta = null;
+  state.loadedImageRegistry = null;
+  dom.startScenarioBtn.disabled = true;
 }
 
 function formatBytes(bytes) {
@@ -107,8 +123,85 @@ function getScenarioTitle(scenario) {
   return scenario?.metadata?.title || "Без названия";
 }
 
-function renderLoadedScenarioStatus(statusText, isError = false) {
-  const source = state.loadedScenarioSource;
+function escapeStatusHtml(value) {
+  return String(value || "")
+    .split("<br>")
+    .map((part) => escapeHtml(part))
+    .join("<br>");
+}
+
+function isJsonFile(file) {
+  return Boolean(file) && (file.type === "application/json" || file.name.toLowerCase().endsWith(".json"));
+}
+
+function isSupportedImageFile(file) {
+  if (!file) {
+    return false;
+  }
+  const name = file.name.toLowerCase();
+  return file.type === "image/png" || file.type === "image/jpeg" || file.type === "image/webp" || /\.(png|jpe?g|webp)$/.test(name);
+}
+
+function basenameFromPath(value) {
+  return String(value || "")
+    .split(/[\\/]/)
+    .pop()
+    .toLowerCase();
+}
+
+function createImageRegistry(imageFiles) {
+  const byBasename = new Map();
+  const urls = [];
+  for (const file of imageFiles) {
+    const url = URL.createObjectURL(file);
+    const basename = basenameFromPath(file.name);
+    urls.push(url);
+    byBasename.set(basename, { file, url, basename });
+  }
+  return { byBasename, urls };
+}
+
+function getVisualAssets() {
+  return Array.isArray(state.loadedScenario?.visual_assets)
+    ? state.loadedScenario.visual_assets.filter((item) => item && typeof item === "object")
+    : [];
+}
+
+function getVisualAssetImageUrl(asset) {
+  const registry = state.loadedImageRegistry;
+  if (!registry || !asset || !asset.file) {
+    return null;
+  }
+  const match = registry.byBasename.get(basenameFromPath(asset.file));
+  return match ? match.url : null;
+}
+
+function getVisualAssetForParticipant(participant) {
+  const assets = getVisualAssets();
+  const byVisualAssetId =
+    participant.visual_asset_id || participant.image_id
+      ? assets.find((asset) => asset.id === participant.visual_asset_id || asset.id === participant.image_id)
+      : null;
+  const byTarget = assets.find(
+    (asset) => asset.target_type === "participant" && asset.target_id === participant.id
+  );
+  const byPlacement = assets.find(
+    (asset) =>
+      asset.placement === "participant_card" &&
+      asset.target_type === "participant" &&
+      asset.target_id === participant.id
+  );
+  return byTarget || byPlacement || byVisualAssetId || null;
+}
+
+function getVisualAssetsForDisplay() {
+  return getVisualAssets().filter((asset) =>
+    ["participant_portrait", "scene", "object", "cover"].includes(asset.type)
+  );
+}
+
+function renderLoadedPackageStatus(statusText, isError = false) {
+  const source = state.loadedScenarioMeta;
   if (!source) {
     dom.validationPanel.className = `status-panel ${isError ? "status-error" : "status-ok"}`;
     dom.validationPanel.textContent = statusText || "Сценарий пока не загружен.";
@@ -117,12 +210,17 @@ function renderLoadedScenarioStatus(statusText, isError = false) {
 
   const parts = [
     `<p><strong>Источник:</strong> ${escapeHtml(source.sourceLabel)}</p>`,
-    source.fileName ? `<p><strong>Файл:</strong> ${escapeHtml(source.fileName)}</p>` : "",
+    source.fileName ? `<p><strong>JSON-файл:</strong> ${escapeHtml(source.fileName)}</p>` : "",
     Number.isFinite(source.sizeBytes)
       ? `<p><strong>Размер:</strong> ${escapeHtml(formatBytes(source.sizeBytes))}</p>`
       : "",
+    `<p><strong>Изображений выбрано:</strong> ${escapeHtml(String(source.selectedImageCount || 0))}</p>`,
+    `<p><strong>Совпадений с visual_assets:</strong> ${escapeHtml(String(source.matchedImageCount || 0))}</p>`,
+    source.unmatchedImageCount > 0
+      ? `<p><strong>Неиспользовано:</strong> ${escapeHtml(String(source.unmatchedImageCount))}</p>`
+      : "",
     `<p><strong>Сценарий:</strong> ${escapeHtml(source.title || "Без названия")}</p>`,
-    statusText ? `<p><strong>Статус:</strong> ${statusText}</p>` : "",
+    statusText ? `<p><strong>Статус:</strong> ${escapeStatusHtml(statusText)}</p>` : "",
   ].filter(Boolean);
 
   dom.validationPanel.className = `status-panel ${isError ? "status-error" : "status-ok"}`;
@@ -145,16 +243,112 @@ function readFileAsText(file) {
   });
 }
 
-function setLoadedScenario(scenario, sourceLabel, fileName, sizeBytes, statusText = "Сценарий готов к запуску.") {
-  state.loadedScenario = scenario;
-  state.loadedScenarioSource = {
-    sourceLabel,
-    fileName,
-    sizeBytes,
-    title: getScenarioTitle(scenario),
-  };
-  renderLoadedScenarioStatus(statusText, false);
-  dom.startScenarioBtn.disabled = false;
+function getVisualAssetMatchCount(scenario, registry) {
+  const assets = Array.isArray(scenario?.visual_assets) ? scenario.visual_assets : [];
+  if (!registry) {
+    return 0;
+  }
+  return assets.filter((asset) => asset && asset.file && registry.byBasename.has(basenameFromPath(asset.file))).length;
+}
+
+async function loadCasePackage(files, sourceLabel) {
+  clearLoadedPackage();
+  const fileList = Array.from(files || []);
+  const jsonFiles = fileList.filter(isJsonFile);
+  const imageFiles = fileList.filter(isSupportedImageFile);
+  const unsupportedFiles = fileList.filter((file) => !isJsonFile(file) && !isSupportedImageFile(file));
+
+  if (!jsonFiles.length) {
+    throw new Error("Выберите один JSON-файл сценария.");
+  }
+  if (jsonFiles.length > 1) {
+    throw new Error("Нужно выбрать только один JSON-файл сценария.");
+  }
+  if (unsupportedFiles.length) {
+    throw new Error(`Найдены неподдерживаемые файлы: ${unsupportedFiles.map((file) => file.name).join(", ")}`);
+  }
+
+  const scenarioFile = jsonFiles[0];
+  const imageRegistry = createImageRegistry(imageFiles);
+
+  try {
+    const raw = await readFileAsText(scenarioFile);
+    if (!raw.trim()) {
+      throw new Error("JSON-файл сценария пуст.");
+    }
+
+    let scenario;
+    try {
+      scenario = JSON.parse(raw);
+    } catch (error) {
+      throw new Error("Не удалось разобрать JSON сценария.");
+    }
+
+    const validation = await postJson("/api/validate-scenario", scenario);
+    if (!validation.ok) {
+      throw new Error(validation.errors?.join("<br>") || "JSON-файл не прошёл проверку сценария.");
+    }
+
+    if (state.loadedImageRegistry) {
+      revokeImageRegistry(state.loadedImageRegistry);
+    }
+    state.loadedScenario = scenario;
+    state.loadedImageRegistry = imageRegistry;
+    const matchedImageCount = getVisualAssetMatchCount(scenario, imageRegistry);
+    state.loadedScenarioMeta = {
+      sourceLabel,
+      fileName: scenarioFile.name,
+      sizeBytes: scenarioFile.size,
+      title: getScenarioTitle(scenario),
+      selectedImageCount: imageFiles.length,
+      matchedImageCount,
+      unmatchedImageCount: Math.max(0, imageFiles.length - matchedImageCount),
+    };
+    dom.startScenarioBtn.disabled = false;
+    renderLoadedPackageStatus("Пакет дела прочитан и проверен.");
+  } catch (error) {
+    revokeImageRegistry(imageRegistry);
+    renderValidation(`Ошибка загрузки пакета дела: ${error.message}`, true);
+    throw error;
+  }
+}
+
+function revokeImageRegistry(registry) {
+  if (!registry || !Array.isArray(registry.urls)) {
+    return;
+  }
+  for (const url of registry.urls) {
+    URL.revokeObjectURL(url);
+  }
+}
+
+function renderAssetMedia(asset, className = "visual-asset-media", fallbackText = "Иллюстрация будет здесь") {
+  const url = getVisualAssetImageUrl(asset);
+  if (url) {
+    return `
+      <div class="${className}">
+        <img src="${escapeHtml(url)}" alt="${escapeHtml(asset.alt || asset.title || "Иллюстрация")}" />
+      </div>
+    `;
+  }
+
+  return `
+    <div class="${className}">
+      <div class="visual-asset-placeholder">${escapeHtml(asset?.title || asset?.alt || fallbackText)}</div>
+    </div>
+  `;
+}
+
+function renderParticipantPortrait(participant) {
+  const asset = getVisualAssetForParticipant(participant);
+  if (asset) {
+    return renderAssetMedia(asset, "participant-card-portrait", "Портрет будет здесь");
+  }
+  return `
+    <div class="participant-card-portrait">
+      <div class="participant-card-portrait-placeholder">Портрет будет здесь</div>
+    </div>
+  `;
 }
 
 async function postJson(url, payload) {
@@ -278,6 +472,37 @@ function renderCaseIntro() {
   `;
 }
 
+function renderVisualAssets() {
+  const assets = getVisualAssetsForDisplay().filter((asset) => ["scene", "object", "cover"].includes(asset.type));
+  if (!assets.length) {
+    dom.visualAssetsPanel.className = "visual-assets-grid empty-state";
+    dom.visualAssetsPanel.textContent = "Иллюстрации дела появятся после загрузки пакета дела.";
+    return;
+  }
+
+  dom.visualAssetsPanel.className = "visual-assets-grid";
+  dom.visualAssetsPanel.innerHTML = assets
+    .map((asset) => {
+      const title = escapeHtml(asset.title || asset.alt || "Иллюстрация дела");
+      const placementLabel =
+        asset.type === "scene"
+          ? "Сцена"
+          : asset.type === "object"
+            ? "Объект"
+            : "Обложка дела";
+      return `
+        <article class="visual-asset-card">
+          ${renderAssetMedia(asset)}
+          <div>
+            <p class="participant-detail-label">${placementLabel}</p>
+            <h3>${title}</h3>
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+}
+
 function renderParticipantDialogue(participant, isActive) {
   const actions = state.scenario.dialogue_actions.filter((action) => action.participant_id === participant.id);
   const visibleActions = actions.filter(isDialogueVisible);
@@ -382,9 +607,7 @@ function renderParticipants() {
         : "<li>Связей пока нет.</li>";
       return `
         <article class="participant-card ${activeClass}">
-          <div class="participant-card-portrait" aria-hidden="true">
-            <span>Портрет будет здесь</span>
-          </div>
+          ${renderParticipantPortrait(participant)}
           <div class="participant-card-body">
             <div class="participant-card-header">
               <div>
@@ -565,6 +788,7 @@ function renderAll() {
     return;
   }
   renderCaseIntro();
+  renderVisualAssets();
   renderParticipants();
   renderRelationships();
   renderEvidence();
@@ -579,7 +803,7 @@ function startScenarioFromResponse(data) {
   state.selectedParticipantId = null;
   state.selectedEvidenceId = null;
   state.dialogueHistoryByParticipant = new Map();
-  renderLoadedScenarioStatus("Сценарий запущен. Кликайте по участникам, доказательствам и вердиктам, чтобы протестировать граф.");
+  renderLoadedPackageStatus("Сценарий запущен. Кликайте по участникам, доказательствам и вердиктам, чтобы протестировать граф.");
   renderAll();
 }
 
@@ -643,64 +867,35 @@ dom.loadDemoBtn.addEventListener("click", async () => {
     if (!validation.ok) {
       throw new Error(validation.errors?.join("<br>") || "Демо-сценарий не прошёл проверку.");
     }
-    setLoadedScenario(
-      data,
-      "Встроенный демо-сценарий",
-      "demo_case.json",
-      new Blob([JSON.stringify(data)]).size,
-      "Демо-сценарий проверен и готов к запуску."
-    );
-    dom.scenarioFileInput.value = "";
+    clearLoadedPackage();
+    state.loadedScenario = data;
+    state.loadedImageRegistry = { byBasename: new Map(), urls: [] };
+    state.loadedScenarioMeta = {
+      sourceLabel: "Встроенный демо-пакет",
+      fileName: "demo_case.json",
+      sizeBytes: new Blob([JSON.stringify(data)]).size,
+      title: getScenarioTitle(data),
+      selectedImageCount: 0,
+      matchedImageCount: 0,
+      unmatchedImageCount: 0,
+    };
+    dom.startScenarioBtn.disabled = false;
+    dom.casePackageInput.value = "";
+    renderLoadedPackageStatus("Демо-пакет проверен и готов к запуску.");
   } catch (error) {
     renderValidation(`Не удалось загрузить демо-сценарий: ${error.message}`, true);
-    state.loadedScenario = null;
-    state.loadedScenarioSource = null;
-    dom.startScenarioBtn.disabled = true;
+    clearLoadedPackage();
   }
 });
 
-dom.scenarioFileInput.addEventListener("change", async () => {
+dom.casePackageInput.addEventListener("change", async () => {
   try {
-    const file = dom.scenarioFileInput.files && dom.scenarioFileInput.files[0];
-    if (!file) {
-      throw new Error("Файл сценария не выбран.");
+    if (!dom.casePackageInput.files || !dom.casePackageInput.files.length) {
+      throw new Error("Пакет дела не выбран.");
     }
-    if (!file.name.toLowerCase().endsWith(".json")) {
-      throw new Error("Нужен JSON-файл сценария.");
-    }
-    if (!file.size) {
-      throw new Error("Файл сценария пуст.");
-    }
-
-    const text = await readFileAsText(file);
-    if (!text.trim()) {
-      throw new Error("Файл сценария пуст.");
-    }
-
-    let scenario;
-    try {
-      scenario = JSON.parse(text);
-    } catch (error) {
-      throw new Error("Не удалось разобрать JSON сценария.");
-    }
-
-    const validation = await postJson("/api/validate-scenario", scenario);
-    if (!validation.ok) {
-      throw new Error(validation.errors?.join("<br>") || "JSON-файл не прошёл проверку сценария.");
-    }
-
-    setLoadedScenario(
-      scenario,
-      "JSON-файл сценария",
-      file.name,
-      file.size,
-      "JSON-файл прочитан и проверен."
-    );
+    await loadCasePackage(dom.casePackageInput.files, "JSON-пакет дела");
   } catch (error) {
-    state.loadedScenario = null;
-    state.loadedScenarioSource = null;
-    dom.startScenarioBtn.disabled = true;
-    renderValidation(`Ошибка загрузки сценария: ${error.message}`, true);
+    renderValidation(`Ошибка загрузки пакета дела: ${error.message}`, true);
   }
 });
 
@@ -712,8 +907,8 @@ dom.startScenarioBtn.addEventListener("click", async () => {
     const data = await postJson("/api/start-scenario", state.loadedScenario);
     startScenarioFromResponse(data);
   } catch (error) {
-    if (state.loadedScenarioSource) {
-      renderLoadedScenarioStatus(error.message, true);
+    if (state.loadedScenarioMeta) {
+      renderLoadedPackageStatus(error.message, true);
     } else {
       renderValidation(error.message, true);
     }

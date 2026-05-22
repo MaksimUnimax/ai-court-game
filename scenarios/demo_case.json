@@ -44,6 +44,63 @@
       "description": "Алина снимала квартиру Бориса один год, и спор касается возврата её депозита."
     }
   ],
+  "visual_assets": [
+    {
+      "id": "va_alina_portrait",
+      "type": "participant_portrait",
+      "target_type": "participant",
+      "target_id": "p_alina",
+      "file": "alina_morozova.png",
+      "title": "Портрет Алины",
+      "alt": "Портрет участницы Алины",
+      "placement": "participant_card",
+      "hidden_purpose": "Внутреннее описание важной визуальной детали, не показывать игроку"
+    },
+    {
+      "id": "va_boris_portrait",
+      "type": "participant_portrait",
+      "target_type": "participant",
+      "target_id": "p_boris",
+      "file": "boris_levin.png",
+      "title": "Портрет Бориса",
+      "alt": "Портрет участника Бориса",
+      "placement": "participant_card",
+      "hidden_purpose": "Внутреннее описание важной визуальной детали, не показывать игроку"
+    },
+    {
+      "id": "va_apartment_scene",
+      "type": "scene",
+      "target_type": "scene",
+      "target_id": "scene_after_moveout",
+      "file": "apartment_after_moveout.png",
+      "title": "Квартира после выезда",
+      "alt": "Общий вид квартиры после выезда",
+      "placement": "case_panel",
+      "hidden_purpose": "Показать естественную сцену без явных подсказок"
+    },
+    {
+      "id": "va_lease_doc",
+      "type": "object",
+      "target_type": "object",
+      "target_id": "e_lease_clause",
+      "file": "lease_clause.png",
+      "title": "Пункт договора",
+      "alt": "Фрагмент договора о депозите",
+      "placement": "case_panel",
+      "hidden_purpose": "Визуальный контекст договора, не показывать игроку"
+    },
+    {
+      "id": "va_case_cover",
+      "type": "cover",
+      "target_type": "case",
+      "target_id": "demo-deposit-dispute",
+      "file": "case_cover.png",
+      "title": "Пропавший депозит",
+      "alt": "Обложка дела о депозите",
+      "placement": "cover",
+      "hidden_purpose": "Обложка дела для первого экрана"
+    }
+  ],
   "evidence": [
     {
       "id": "e_lease_clause",

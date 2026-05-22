@@ -25,8 +25,7 @@ body {
 }
 
 button,
-input,
-textarea {
+input {
   font: inherit;
 }
 
@@ -97,6 +96,10 @@ h1 {
   grid-column: span 12;
 }
 
+.media-panel {
+  grid-column: span 12;
+}
+
 .participants-panel,
 .relationships-panel,
 .evidence-panel,
@@ -133,7 +136,7 @@ h1 {
   font-weight: 700;
 }
 
-.scenario-file-input {
+.case-package-input {
   width: 100%;
   padding: 12px;
   border-radius: 14px;
@@ -142,7 +145,7 @@ h1 {
   color: var(--ink-soft);
 }
 
-.scenario-file-input::file-selector-button {
+.case-package-input::file-selector-button {
   margin-right: 12px;
   padding: 8px 14px;
   border: none;
@@ -243,6 +246,50 @@ button:disabled {
 .participant-card-header button,
 .dialogue-question-list button {
   margin-top: 10px;
+}
+
+.visual-assets-grid {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.visual-asset-card {
+  display: grid;
+  gap: 10px;
+  border-radius: 14px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.62);
+  border: 1px solid rgba(91, 77, 62, 0.16);
+}
+
+.visual-asset-media {
+  min-height: 180px;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid rgba(91, 77, 62, 0.14);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.7), rgba(244, 232, 208, 0.9));
+}
+
+.visual-asset-media img,
+.participant-card-portrait img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.visual-asset-placeholder,
+.participant-card-portrait-placeholder {
+  min-height: inherit;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  text-align: center;
+  color: var(--ink-soft);
+  font-style: italic;
 }
 
 .participant-card-portrait {
@@ -417,6 +464,7 @@ button:disabled {
   .participants-panel,
   .relationships-panel,
   .evidence-panel,
+  .media-panel,
   .log-panel,
   .verdict-panel,
   .final-panel {

@@ -42,6 +42,18 @@ SUPPORTED_EFFECT_TYPES = {
     "show_note",
     "enable_verdict",
 }
+SUPPORTED_VISUAL_ASSET_TYPES = {
+    "participant_portrait",
+    "scene",
+    "object",
+    "cover",
+}
+SUPPORTED_VISUAL_TARGET_TYPES = {
+    "participant",
+    "scene",
+    "case",
+    "object",
+}
 
 
 def load_demo_scenario():
@@ -57,6 +69,7 @@ def normalize_payload(payload):
 def normalize_scenario(scenario):
     normalized = deepcopy(scenario)
     normalized.setdefault("relationships", [])
+    normalized.setdefault("visual_assets", [])
 
     for participant in normalized.get("participants", []):
         participant.setdefault("relationships", [])
@@ -206,6 +219,31 @@ def validate_effect(effect, refs, errors, path):
         errors.append(f"{path} references unknown {key} '{value}'")
 
 
+def validate_visual_asset(asset, participant_ids, errors, path):
+    if not isinstance(asset, dict):
+        errors.append(f"{path} must be an object")
+        return
+
+    validate_required_fields(path, asset, ["id", "type", "file"], errors)
+
+    asset_type = asset.get("type")
+    if asset_type not in SUPPORTED_VISUAL_ASSET_TYPES:
+        errors.append(f"{path} uses unsupported visual asset type '{asset_type}'")
+
+    target_type = asset.get("target_type")
+    placement = asset.get("placement")
+    if not target_type and not placement:
+        errors.append(f"{path} must define either target_type or placement")
+    if target_type and target_type not in SUPPORTED_VISUAL_TARGET_TYPES:
+        errors.append(f"{path} uses unsupported target_type '{target_type}'")
+    if target_type == "participant":
+        target_id = asset.get("target_id")
+        if not target_id:
+            errors.append(f"{path} missing 'target_id'")
+        elif target_id not in participant_ids:
+            errors.append(f"{path} references unknown target_id '{target_id}'")
+
+
 def validate_scenario(scenario):
     errors = []
     scenario = normalize_payload(scenario)
@@ -226,6 +264,14 @@ def validate_scenario(scenario):
     action_ids = collect_unique_ids(scenario.get("dialogue_actions", []), "dialogue_actions", errors)
     verdict_ids = collect_unique_ids(scenario.get("verdicts", []), "verdicts", errors)
     refs = {"participants": participant_ids, "evidence": evidence_ids, "actions": action_ids, "verdicts": verdict_ids}
+
+    if "visual_assets" in scenario:
+        if not isinstance(scenario["visual_assets"], list):
+            errors.append("'visual_assets' must be a list")
+        else:
+            collect_unique_ids(scenario["visual_assets"], "visual_assets", errors)
+            for index, asset in enumerate(scenario["visual_assets"]):
+                validate_visual_asset(asset, participant_ids, errors, f"visual_assets[{index}]")
 
     for participant in scenario.get("participants", []):
         if isinstance(participant, dict):
