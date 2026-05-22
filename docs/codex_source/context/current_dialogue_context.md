@@ -47,3 +47,15 @@ The script must not merely distribute text by roles.
 The script must interpret the full scenario graph and build the case logic from the scenario document.
 
 This architecture decision must be reflected before implementation.
+
+## CTX-2026-05-22-003 — First scaffold implementation started
+
+Source: implementation run based on approved docs.
+
+The first application scaffold uses a small Python standard-library server and a static browser page.
+
+The scaffold loads scenario JSON from a textarea or built-in demo scenario, validates it, starts the scenario and runs click-only gameplay from scenario graph data.
+
+The first scaffold includes participants, relationships, evidence, dialogue actions, deterministic conditions, deterministic effects, verdict selection and final explanation.
+
+No OpenAI API, image generation, auth, database or monetization is included.

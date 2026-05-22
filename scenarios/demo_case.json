@@ -1,0 +1,178 @@
+{
+  "metadata": {
+    "id": "demo-deposit-dispute",
+    "title": "The Missing Deposit Transfer",
+    "case_type": "dispute",
+    "difficulty": "draft"
+  },
+  "case_intro": {
+    "summary": "Former tenant Alina claims landlord Boris kept her apartment deposit unfairly after move-out.",
+    "judge_briefing": "Decide whether Boris had grounds to keep the deposit or whether Alina should receive it back."
+  },
+  "participants": [
+    {
+      "id": "p_alina",
+      "name": "Alina Morozova",
+      "role": "Side A",
+      "position": "Former tenant and product designer",
+      "relation_to_case": "Requests the return of her deposit",
+      "public_description": "Alina says she left the apartment in good condition and settled all utility payments before move-out.",
+      "relationships": [
+        "Former tenant of Boris's apartment",
+        "Signed the move-out handover with Boris"
+      ]
+    },
+    {
+      "id": "p_boris",
+      "name": "Boris Levin",
+      "role": "Side B",
+      "position": "Apartment owner and landlord",
+      "relation_to_case": "Refuses to return the full deposit",
+      "public_description": "Boris claims the deposit was consumed by wall damage and an unpaid utility bill.",
+      "relationships": [
+        "Landlord of Alina",
+        "Co-signed the move-out paperwork"
+      ]
+    }
+  ],
+  "relationships": [
+    {
+      "id": "r_tenant_landlord",
+      "from_participant_id": "p_alina",
+      "to_participant_id": "p_boris",
+      "label": "Tenant and landlord",
+      "description": "Alina rented Boris's apartment for one year and the dispute is about the return of her deposit."
+    }
+  ],
+  "evidence": [
+    {
+      "id": "e_lease_clause",
+      "title": "Lease clause on the deposit",
+      "short_description": "The lease says the deposit is returned if the apartment is undamaged and utilities are paid.",
+      "inspection_text": "Clause 8 states that the deposit must be returned after a clean move-out inspection and payment of utilities.",
+      "available_at_start": true,
+      "proves": "The dispute turns on real damage and utility payment, not on Boris's discretion.",
+      "key_evidence": true,
+      "effects": [
+        {
+          "type": "show_note",
+          "note": "Lease terms confirm Boris can keep the deposit only for real damage or unpaid utilities."
+        }
+      ]
+    },
+    {
+      "id": "e_moveout_report",
+      "title": "Signed move-out report",
+      "short_description": "A signed report from the handover inspection.",
+      "inspection_text": "The report says: walls intact, no repair costs, both parties signed on the handover date.",
+      "available_at_start": false,
+      "proves": "Boris already signed a clean inspection report.",
+      "key_evidence": true,
+      "effects": [
+        {
+          "type": "unlock_question",
+          "question_id": "q_alina_report"
+        },
+        {
+          "type": "discover_fact",
+          "fact_id": "fact_clean_report_exists",
+          "label": "A signed clean move-out report exists."
+        },
+        {
+          "type": "show_note",
+          "note": "Opening the move-out report unlocks a follow-up question for Alina."
+        }
+      ]
+    }
+  ],
+  "dialogue_actions": [
+    {
+      "id": "q_alina_payment",
+      "participant_id": "p_alina",
+      "label": "Ask Alina about the utility payment",
+      "response_text": "Alina says she paid the final utility transfer on the morning of move-out and told Boris about it.",
+      "available_at_start": true,
+      "effects": [
+        {
+          "type": "discover_fact",
+          "fact_id": "fact_alina_claims_payment",
+          "label": "Alina claims the utility balance was paid before handover."
+        },
+        {
+          "type": "show_note",
+          "note": "Alina says Boris knew she had sent the final payment."
+        }
+      ]
+    },
+    {
+      "id": "q_boris_reason",
+      "participant_id": "p_boris",
+      "label": "Ask Boris why he kept the deposit",
+      "response_text": "Boris says he kept the deposit because the wall needed repainting and Alina had not settled the final utility bill.",
+      "available_at_start": true,
+      "effects": [
+        {
+          "type": "unlock_evidence",
+          "evidence_id": "e_moveout_report"
+        },
+        {
+          "type": "show_note",
+          "note": "Boris points to damage and unpaid utilities. His answer unlocks the move-out report."
+        }
+      ]
+    },
+    {
+      "id": "q_alina_report",
+      "participant_id": "p_alina",
+      "label": "Ask Alina about the signed move-out report",
+      "response_text": "Alina says Boris checked the apartment room by room, signed the clean report, and only later changed his story.",
+      "available_at_start": false,
+      "available_if": {
+        "type": "evidence_opened",
+        "evidence_id": "e_moveout_report"
+      },
+      "effects": [
+        {
+          "type": "mark_contradiction",
+          "contradiction_id": "contradiction_boris_damage_claim",
+          "label": "Boris's damage claim contradicts the signed clean report."
+        },
+        {
+          "type": "enable_verdict",
+          "verdict_id": "v_alina_right"
+        },
+        {
+          "type": "enable_verdict",
+          "verdict_id": "v_boris_right"
+        },
+        {
+          "type": "show_note",
+          "note": "The clean report directly challenges Boris's explanation for keeping the deposit."
+        }
+      ]
+    }
+  ],
+  "verdicts": [
+    {
+      "id": "v_alina_right",
+      "label": "Side A is right",
+      "correct": true,
+      "available_at_start": false
+    },
+    {
+      "id": "v_boris_right",
+      "label": "Side B is right",
+      "correct": false,
+      "available_at_start": false
+    }
+  ],
+  "solution": {
+    "correct_verdict_id": "v_alina_right",
+    "explanation": "Boris's main justification fails because he signed a clean move-out report. Once that contradiction appears, Alina's side is stronger and the deposit should be returned.",
+    "key_points": [
+      "The lease clause limits when Boris can keep the deposit.",
+      "Boris claimed wall damage, but the signed move-out report says the apartment was clean.",
+      "The contradiction makes Boris's deposit decision unreliable."
+    ]
+  }
+}

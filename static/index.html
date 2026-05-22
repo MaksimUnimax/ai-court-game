@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI Court Game Scaffold</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="hero">
+        <p class="eyebrow">AI Court Game</p>
+        <h1>Data-driven scenario scaffold</h1>
+        <p class="hero-copy">
+          Load a scenario JSON, validate it, and run a click-only court case driven by
+          universal graph rules.
+        </p>
+      </header>
+
+      <main class="layout">
+        <section class="panel loader-panel">
+          <h2>Scenario loader</h2>
+          <p class="panel-copy">
+            Paste scenario JSON or load the built-in demo case. Gameplay after start is click-only.
+          </p>
+          <textarea id="scenario-input" spellcheck="false"></textarea>
+          <div class="button-row">
+            <button id="load-demo-btn" type="button">Load demo scenario</button>
+            <button id="start-scenario-btn" type="button">Start scenario</button>
+          </div>
+          <div id="validation-panel" class="status-panel">No scenario loaded yet.</div>
+        </section>
+
+        <section class="panel intro-panel">
+          <h2>Case intro</h2>
+          <div id="case-intro-panel" class="empty-state">Start a scenario to view the case briefing.</div>
+        </section>
+
+        <section class="panel participants-panel">
+          <h2>Participants</h2>
+          <div id="participants-panel" class="participant-grid"></div>
+          <div id="participant-detail-panel" class="detail-panel empty-state">
+            Select a participant card to inspect details.
+          </div>
+        </section>
+
+        <section class="panel relationships-panel">
+          <h2>Participant relationships</h2>
+          <div id="relationships-panel" class="relationship-list empty-state">
+            Relationships will appear here after scenario start.
+          </div>
+        </section>
+
+        <section class="panel evidence-panel">
+          <h2>Evidence</h2>
+          <div id="evidence-panel" class="card-list empty-state">No visible evidence yet.</div>
+          <div id="evidence-detail-panel" class="detail-panel empty-state">
+            Click evidence to inspect it.
+          </div>
+        </section>
+
+        <section class="panel actions-panel">
+          <h2>Dialogue actions</h2>
+          <div id="actions-panel" class="action-groups empty-state">No dialogue actions available.</div>
+        </section>
+
+        <section class="panel log-panel">
+          <h2>Event log and discoveries</h2>
+          <div id="event-log-panel" class="log-list empty-state">No events recorded yet.</div>
+        </section>
+
+        <section class="panel verdict-panel">
+          <h2>Verdict</h2>
+          <div id="verdict-panel" class="card-list empty-state">Verdict options are not enabled yet.</div>
+        </section>
+
+        <section class="panel final-panel">
+          <h2>Final explanation</h2>
+          <div id="final-explanation-panel" class="empty-state">
+            The final explanation appears after a verdict is selected.
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

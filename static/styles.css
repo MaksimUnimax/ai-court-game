@@ -1,0 +1,259 @@
+:root {
+  --paper: #f5eddc;
+  --paper-strong: #efe0bf;
+  --ink: #231910;
+  --ink-soft: #5b4d3e;
+  --accent: #7b2f26;
+  --accent-strong: #4e1410;
+  --frame: #b48f5b;
+  --surface: rgba(255, 252, 244, 0.85);
+  --shadow: rgba(35, 25, 16, 0.18);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at top left, rgba(255, 243, 213, 0.75), transparent 36%),
+    linear-gradient(160deg, #d7c39c 0%, #f7f2e7 42%, #d8c4a0 100%);
+  font-family: Georgia, "Times New Roman", serif;
+}
+
+button,
+textarea {
+  font: inherit;
+}
+
+.page-shell {
+  width: min(1240px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 24px 0 40px;
+}
+
+.hero {
+  padding: 28px;
+  border: 1px solid rgba(123, 47, 38, 0.25);
+  border-radius: 22px;
+  background:
+    linear-gradient(180deg, rgba(255, 250, 239, 0.96), rgba(245, 233, 204, 0.92)),
+    var(--paper);
+  box-shadow: 0 18px 40px var(--shadow);
+}
+
+.eyebrow {
+  margin: 0 0 10px;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-size: 0.82rem;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  font-weight: 700;
+}
+
+h1 {
+  font-size: clamp(2.1rem, 4vw, 3.8rem);
+}
+
+.hero-copy,
+.panel-copy,
+.muted {
+  color: var(--ink-soft);
+}
+
+.hero-copy {
+  margin: 12px 0 0;
+  max-width: 760px;
+  line-height: 1.5;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 18px;
+  margin-top: 22px;
+}
+
+.panel {
+  background: var(--surface);
+  border: 1px solid rgba(180, 143, 91, 0.45);
+  border-radius: 18px;
+  box-shadow: 0 12px 24px var(--shadow);
+  padding: 18px;
+}
+
+.loader-panel,
+.intro-panel {
+  grid-column: span 12;
+}
+
+.participants-panel,
+.relationships-panel,
+.evidence-panel,
+.actions-panel,
+.log-panel,
+.verdict-panel,
+.final-panel {
+  grid-column: span 6;
+}
+
+.participants-panel,
+.actions-panel,
+.log-panel,
+.final-panel {
+  min-height: 320px;
+}
+
+.relationships-panel,
+.evidence-panel,
+.verdict-panel {
+  min-height: 280px;
+}
+
+textarea {
+  width: 100%;
+  min-height: 220px;
+  margin-top: 14px;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(91, 77, 62, 0.35);
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--ink);
+  resize: vertical;
+}
+
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+button {
+  cursor: pointer;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 999px;
+  color: #fff8ef;
+  background: linear-gradient(180deg, var(--accent), var(--accent-strong));
+  box-shadow: 0 10px 20px rgba(78, 20, 16, 0.22);
+}
+
+button:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.status-panel,
+.detail-panel,
+.empty-state,
+.list-card,
+.participant-card,
+.relationship-card,
+.log-card,
+.verdict-card {
+  border-radius: 14px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.62);
+  border: 1px solid rgba(91, 77, 62, 0.16);
+}
+
+.status-panel {
+  margin-top: 14px;
+}
+
+.status-error {
+  color: #7e1512;
+  background: rgba(255, 236, 233, 0.88);
+}
+
+.status-ok {
+  color: #214a2b;
+  background: rgba(233, 248, 234, 0.88);
+}
+
+.participant-grid,
+.card-list,
+.relationship-list,
+.log-list,
+.action-groups {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.participant-grid {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.participant-card.active {
+  outline: 2px solid rgba(123, 47, 38, 0.34);
+}
+
+.participant-card button,
+.list-card button,
+.verdict-card button,
+.action-group button {
+  margin-top: 10px;
+}
+
+.action-group {
+  border-radius: 14px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.action-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.pill {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(123, 47, 38, 0.12);
+  color: var(--accent-strong);
+  font-size: 0.88rem;
+}
+
+.final-good {
+  color: #214a2b;
+}
+
+.final-bad {
+  color: #7e1512;
+}
+
+.inline-list {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+
+@media (max-width: 920px) {
+  .participants-panel,
+  .relationships-panel,
+  .evidence-panel,
+  .actions-panel,
+  .log-panel,
+  .verdict-panel,
+  .final-panel {
+    grid-column: span 12;
+  }
+}

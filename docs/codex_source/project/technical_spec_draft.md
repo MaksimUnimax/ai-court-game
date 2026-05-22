@@ -225,3 +225,11 @@ Initial effect types:
 - mark_contradiction;
 - show_note;
 - enable_verdict.
+
+## Implementation note — First scaffold
+
+The first scaffold implementation uses a small Python standard-library server and a static browser UI.
+
+The server serves the page, returns a built-in demo scenario, validates scenario JSON and returns normalized initial state.
+
+The browser runs the first universal click-only scenario engine for participants, evidence, dialogue actions, conditions, effects, verdicts and final explanation.
