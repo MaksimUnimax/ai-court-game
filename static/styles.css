@@ -25,6 +25,7 @@ body {
 }
 
 button,
+input,
 textarea {
   font: inherit;
 }
@@ -121,16 +122,40 @@ h1 {
   min-height: 280px;
 }
 
-textarea {
-  width: 100%;
-  min-height: 220px;
+.file-upload-row {
+  display: grid;
+  gap: 10px;
   margin-top: 14px;
-  padding: 14px;
+}
+
+.file-upload-label {
+  color: var(--accent-strong);
+  font-weight: 700;
+}
+
+.scenario-file-input {
+  width: 100%;
+  padding: 12px;
   border-radius: 14px;
-  border: 1px solid rgba(91, 77, 62, 0.35);
+  border: 1px dashed rgba(91, 77, 62, 0.28);
   background: rgba(255, 255, 255, 0.72);
-  color: var(--ink);
-  resize: vertical;
+  color: var(--ink-soft);
+}
+
+.scenario-file-input::file-selector-button {
+  margin-right: 12px;
+  padding: 8px 14px;
+  border: none;
+  border-radius: 999px;
+  color: #fff8ef;
+  background: linear-gradient(180deg, var(--accent), var(--accent-strong));
+  cursor: pointer;
+}
+
+.file-upload-hint {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.92rem;
 }
 
 .button-row {

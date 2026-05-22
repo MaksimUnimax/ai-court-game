@@ -21,9 +21,13 @@
         <section class="panel loader-panel">
           <h2>Загрузка сценария</h2>
           <p class="panel-copy">
-            Вставьте сценарный JSON или загрузите встроенное демо-дело. После старта игра идёт только кликами.
+            Загрузите JSON-файл сценария или встроенное демо-дело. После старта игра идёт только кликами.
           </p>
-          <textarea id="scenario-input" spellcheck="false"></textarea>
+          <div class="file-upload-row">
+            <label class="file-upload-label" for="scenario-file-input">Загрузить JSON-сценарий</label>
+            <input id="scenario-file-input" class="scenario-file-input" type="file" accept=".json,application/json" />
+            <p class="file-upload-hint">Файл читается в браузере и не сохраняется на сервер.</p>
+          </div>
           <div class="button-row">
             <button id="load-demo-btn" type="button">Загрузить демо-сценарий</button>
             <button id="start-scenario-btn" type="button">Запустить сценарий</button>

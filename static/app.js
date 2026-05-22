@@ -1,13 +1,15 @@
 const state = {
   scenario: null,
   engine: null,
+  loadedScenario: null,
+  loadedScenarioSource: null,
   selectedParticipantId: null,
   selectedEvidenceId: null,
   dialogueHistoryByParticipant: new Map(),
 };
 
 const dom = {
-  scenarioInput: document.querySelector("#scenario-input"),
+  scenarioFileInput: document.querySelector("#scenario-file-input"),
   loadDemoBtn: document.querySelector("#load-demo-btn"),
   startScenarioBtn: document.querySelector("#start-scenario-btn"),
   validationPanel: document.querySelector("#validation-panel"),
@@ -84,6 +86,49 @@ function renderValidation(message, isError = false) {
   dom.validationPanel.innerHTML = message;
 }
 
+function formatBytes(bytes) {
+  if (!Number.isFinite(bytes)) {
+    return "неизвестно";
+  }
+  if (bytes < 1024) {
+    return `${bytes} Б`;
+  }
+  const units = ["КБ", "МБ", "ГБ"];
+  let value = bytes / 1024;
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+  return `${value.toFixed(value >= 10 ? 1 : 2)} ${units[unitIndex]}`;
+}
+
+function getScenarioTitle(scenario) {
+  return scenario?.metadata?.title || "Без названия";
+}
+
+function renderLoadedScenarioStatus(statusText, isError = false) {
+  const source = state.loadedScenarioSource;
+  if (!source) {
+    dom.validationPanel.className = `status-panel ${isError ? "status-error" : "status-ok"}`;
+    dom.validationPanel.textContent = statusText || "Сценарий пока не загружен.";
+    return;
+  }
+
+  const parts = [
+    `<p><strong>Источник:</strong> ${escapeHtml(source.sourceLabel)}</p>`,
+    source.fileName ? `<p><strong>Файл:</strong> ${escapeHtml(source.fileName)}</p>` : "",
+    Number.isFinite(source.sizeBytes)
+      ? `<p><strong>Размер:</strong> ${escapeHtml(formatBytes(source.sizeBytes))}</p>`
+      : "",
+    `<p><strong>Сценарий:</strong> ${escapeHtml(source.title || "Без названия")}</p>`,
+    statusText ? `<p><strong>Статус:</strong> ${statusText}</p>` : "",
+  ].filter(Boolean);
+
+  dom.validationPanel.className = `status-panel ${isError ? "status-error" : "status-ok"}`;
+  dom.validationPanel.innerHTML = parts.join("");
+}
+
 function escapeHtml(value) {
   return String(value)
     .replaceAll("&", "&amp;")
@@ -91,12 +136,25 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;");
 }
 
-function parseScenarioInput() {
-  const raw = dom.scenarioInput.value.trim();
-  if (!raw) {
-    throw new Error("JSON сценария пуст.");
-  }
-  return JSON.parse(raw);
+function readFileAsText(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("Не удалось прочитать файл."));
+    reader.readAsText(file);
+  });
+}
+
+function setLoadedScenario(scenario, sourceLabel, fileName, sizeBytes, statusText = "Сценарий готов к запуску.") {
+  state.loadedScenario = scenario;
+  state.loadedScenarioSource = {
+    sourceLabel,
+    fileName,
+    sizeBytes,
+    title: getScenarioTitle(scenario),
+  };
+  renderLoadedScenarioStatus(statusText, false);
+  dom.startScenarioBtn.disabled = false;
 }
 
 async function postJson(url, payload) {
@@ -521,7 +579,7 @@ function startScenarioFromResponse(data) {
   state.selectedParticipantId = null;
   state.selectedEvidenceId = null;
   state.dialogueHistoryByParticipant = new Map();
-  renderValidation("Сценарий валиден. Кликайте по участникам, доказательствам и вердиктам, чтобы протестировать граф.");
+  renderLoadedScenarioStatus("Сценарий запущен. Кликайте по участникам, доказательствам и вердиктам, чтобы протестировать граф.");
   renderAll();
 }
 
@@ -581,20 +639,84 @@ dom.loadDemoBtn.addEventListener("click", async () => {
   try {
     const response = await fetch("/api/demo-scenario");
     const data = await response.json();
-    dom.scenarioInput.value = JSON.stringify(data, null, 2);
-    renderValidation("Демо-сценарий загружен в textarea.");
+    const validation = await postJson("/api/validate-scenario", data);
+    if (!validation.ok) {
+      throw new Error(validation.errors?.join("<br>") || "Демо-сценарий не прошёл проверку.");
+    }
+    setLoadedScenario(
+      data,
+      "Встроенный демо-сценарий",
+      "demo_case.json",
+      new Blob([JSON.stringify(data)]).size,
+      "Демо-сценарий проверен и готов к запуску."
+    );
+    dom.scenarioFileInput.value = "";
   } catch (error) {
-    renderValidation(`Не удалось загрузить демо-сценарий: ${escapeHtml(error.message)}`, true);
+    renderValidation(`Не удалось загрузить демо-сценарий: ${error.message}`, true);
+    state.loadedScenario = null;
+    state.loadedScenarioSource = null;
+    dom.startScenarioBtn.disabled = true;
+  }
+});
+
+dom.scenarioFileInput.addEventListener("change", async () => {
+  try {
+    const file = dom.scenarioFileInput.files && dom.scenarioFileInput.files[0];
+    if (!file) {
+      throw new Error("Файл сценария не выбран.");
+    }
+    if (!file.name.toLowerCase().endsWith(".json")) {
+      throw new Error("Нужен JSON-файл сценария.");
+    }
+    if (!file.size) {
+      throw new Error("Файл сценария пуст.");
+    }
+
+    const text = await readFileAsText(file);
+    if (!text.trim()) {
+      throw new Error("Файл сценария пуст.");
+    }
+
+    let scenario;
+    try {
+      scenario = JSON.parse(text);
+    } catch (error) {
+      throw new Error("Не удалось разобрать JSON сценария.");
+    }
+
+    const validation = await postJson("/api/validate-scenario", scenario);
+    if (!validation.ok) {
+      throw new Error(validation.errors?.join("<br>") || "JSON-файл не прошёл проверку сценария.");
+    }
+
+    setLoadedScenario(
+      scenario,
+      "JSON-файл сценария",
+      file.name,
+      file.size,
+      "JSON-файл прочитан и проверен."
+    );
+  } catch (error) {
+    state.loadedScenario = null;
+    state.loadedScenarioSource = null;
+    dom.startScenarioBtn.disabled = true;
+    renderValidation(`Ошибка загрузки сценария: ${error.message}`, true);
   }
 });
 
 dom.startScenarioBtn.addEventListener("click", async () => {
   try {
-    const scenario = parseScenarioInput();
-    const data = await postJson("/api/start-scenario", scenario);
+    if (!state.loadedScenario) {
+      throw new Error("Сначала загрузите JSON-файл сценария или демо-сценарий.");
+    }
+    const data = await postJson("/api/start-scenario", state.loadedScenario);
     startScenarioFromResponse(data);
   } catch (error) {
-    renderValidation(error.message, true);
+    if (state.loadedScenarioSource) {
+      renderLoadedScenarioStatus(error.message, true);
+    } else {
+      renderValidation(error.message, true);
+    }
   }
 });
 
