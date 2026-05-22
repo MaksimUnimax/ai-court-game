@@ -1,0 +1,6 @@
+version: 0.1
+files:
+  - path: docs/codex_source/project_snapshot/PROJECT_SNAPSHOT.md
+    mode: snapshot
+    status: initial
+

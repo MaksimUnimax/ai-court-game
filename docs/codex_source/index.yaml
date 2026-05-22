@@ -1,0 +1,60 @@
+version: 0.1
+project: ai-court-game
+purpose: >
+  Documentation index for the AI Court Game project. Used by ChatGPT and Codex
+  to select exact docs paths, enforce documentation gates, and avoid guessing.
+
+repo:
+  public_url: "https://github.com/MaksimUnimax/ai-court-game"
+  local_root: "/opt/ai-court-game"
+  docs_root: "docs/codex_source"
+
+directory_map:
+  root: "docs/codex_source"
+  rules: "docs/codex_source/rules"
+  context: "docs/codex_source/context"
+  roadmap: "docs/codex_source/roadmap"
+  module_map: "docs/codex_source/module_map"
+  project: "docs/codex_source/project"
+  project_snapshot: "docs/codex_source/project_snapshot"
+  task_cards: "docs/codex_source/task_cards"
+  schemas: "docs/codex_source/schemas"
+  templates: "docs/codex_source/templates"
+
+entrypoint:
+  - path: "docs/codex_source/ENTRYPOINT_FOR_CHATGPT.md"
+    status: "initial"
+
+rules:
+  - path: "docs/codex_source/rules/chatgpt_workflow_rules.md"
+    status: "initial_adapted"
+  - path: "docs/codex_source/rules/codex_prompt_rules.md"
+    status: "initial_adapted"
+  - path: "docs/codex_source/rules/repo_documentation_access_rules.md"
+    status: "initial_adapted"
+  - path: "docs/codex_source/rules/runtime_git_rules.md"
+    status: "initial_adapted"
+  - path: "docs/codex_source/rules/documentation_gate_rules.md"
+    status: "initial_adapted"
+  - path: "docs/codex_source/rules/workflow_run_modes.md"
+    status: "initial_adapted"
+  - path: "docs/codex_source/rules/append_only_memory_rules.md"
+    status: "initial_adapted"
+
+project_docs:
+  - path: "docs/codex_source/project/README.md"
+    status: "placeholder"
+  - path: "docs/codex_source/project_snapshot/PROJECT_SNAPSHOT.md"
+    status: "placeholder"
+  - path: "docs/codex_source/roadmap/roadmap.md"
+    status: "placeholder"
+  - path: "docs/codex_source/module_map/module_map.md"
+    status: "placeholder"
+
+current_state:
+  product_tz_written: false
+  roadmap_written: false
+  application_code_created: false
+  active_blocker: "initial_docs_skeleton_only"
+  next_exact_run: "write_product_tz_and_roadmap"
+
