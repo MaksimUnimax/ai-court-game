@@ -13,11 +13,9 @@ const dom = {
   validationPanel: document.querySelector("#validation-panel"),
   caseIntroPanel: document.querySelector("#case-intro-panel"),
   participantsPanel: document.querySelector("#participants-panel"),
-  participantDetailPanel: document.querySelector("#participant-detail-panel"),
   relationshipsPanel: document.querySelector("#relationships-panel"),
   evidencePanel: document.querySelector("#evidence-panel"),
   evidenceDetailPanel: document.querySelector("#evidence-detail-panel"),
-  dialoguePanels: document.querySelector("#dialogue-panels"),
   eventLogPanel: document.querySelector("#event-log-panel"),
   verdictPanel: document.querySelector("#verdict-panel"),
   finalExplanationPanel: document.querySelector("#final-explanation-panel"),
@@ -222,34 +220,143 @@ function renderCaseIntro() {
   `;
 }
 
+function renderParticipantDialogue(participant, isActive) {
+  const actions = state.scenario.dialogue_actions.filter((action) => action.participant_id === participant.id);
+  const visibleActions = actions.filter(isDialogueVisible);
+  const availableActions = visibleActions.filter(isDialogueAvailable);
+  const history = getDialogueHistory(participant.id);
+
+  const historyHtml = history.length
+    ? history
+        .map(
+          (item) => `
+            <article class="dialogue-history-entry">
+              <p class="dialogue-label">Вопрос</p>
+              <p class="dialogue-question">${escapeHtml(item.question)}</p>
+              <p class="dialogue-label">Ответ</p>
+              <p class="dialogue-answer">${escapeHtml(item.answer)}</p>
+              ${
+                item.notes && item.notes.length
+                  ? `
+                    <div class="dialogue-history-notes">
+                      <p class="dialogue-label">Сопутствующие эффекты</p>
+                      <ul>
+                        ${item.notes.map((note) => `<li>${escapeHtml(note)}</li>`).join("")}
+                      </ul>
+                    </div>
+                  `
+                  : ""
+              }
+            </article>
+          `
+        )
+        .join("")
+    : `<div class="dialogue-window-hint">Пока в истории этого участника нет реплик.</div>`;
+
+  const questionHtml = visibleActions.length
+    ? visibleActions
+        .map((action) => {
+          const asked = state.engine.askedQuestions.has(action.id);
+          const enabled = isDialogueAvailable(action);
+          return `
+            <button type="button" class="dialogue-question-button ${asked ? "is-asked" : ""}" data-action-id="${escapeHtml(
+              action.id
+            )}" ${enabled ? "" : "disabled"}>
+              ${escapeHtml(asked ? `${action.label} (уже задан)` : action.label)}
+            </button>
+          `;
+        })
+        .join("")
+    : `<div class="dialogue-window-hint">Пока для этого участника нет доступных вопросов.</div>`;
+
+  if (!isActive) {
+    return `
+      <section class="participant-dialogue participant-dialogue-preview">
+        <div class="participant-dialogue-header">
+          <div>
+            <h4>Диалог</h4>
+            <p class="muted">Выберите участника, чтобы открыть разговор.</p>
+          </div>
+          <div class="pill">${history.length ? `История: ${history.length}` : "Пусто"}</div>
+        </div>
+        <div class="participant-dialogue-summary">
+          <p>${history.length ? `В истории уже ${history.length} реплик.` : "В этой панели появятся вопросы и ответы участника."}</p>
+          <p>${availableActions.length ? `Доступно вопросов: ${availableActions.length}` : "Пока нет доступных вопросов."}</p>
+        </div>
+      </section>
+    `;
+  }
+
+  return `
+    <section class="participant-dialogue participant-dialogue-active">
+      <div class="participant-dialogue-header">
+        <div>
+          <h4>Диалог</h4>
+          <p class="muted">Разговор с этим участником открыт.</p>
+        </div>
+        <div class="pill">${availableActions.length ? `Доступно вопросов: ${availableActions.length}` : "Вопросов нет"}</div>
+      </div>
+      <div class="participant-dialogue-body">
+        ${
+          history.length
+            ? `
+              <div class="dialogue-history">
+                ${historyHtml}
+              </div>
+            `
+            : `<div class="dialogue-window-hint">Пока в этом диалоге нет вопросов. Выберите вопрос ниже, чтобы начать разговор.</div>`
+        }
+        <div class="dialogue-question-list">
+          ${questionHtml}
+        </div>
+      </div>
+    </section>
+  `;
+}
+
 function renderParticipants() {
   dom.participantsPanel.innerHTML = state.scenario.participants
     .map((participant) => {
       const activeClass = participant.id === state.selectedParticipantId ? "active" : "";
+      const relationshipItems = Array.isArray(participant.relationships) ? participant.relationships : [];
+      const relationships = relationshipItems.length
+        ? relationshipItems.map((item) => `<li>${escapeHtml(item)}</li>`).join("")
+        : "<li>Связей пока нет.</li>";
       return `
-        <div class="participant-card ${activeClass}">
-          <h3>${escapeHtml(participant.name)}</h3>
-          <div class="pill">${escapeHtml(participant.role)}</div>
-          <p class="muted">${escapeHtml(participant.position)}</p>
-          <button type="button" data-participant-id="${escapeHtml(participant.id)}">Открыть диалог</button>
-        </div>
+        <article class="participant-card ${activeClass}">
+          <div class="participant-card-portrait" aria-hidden="true">
+            <span>Портрет будет здесь</span>
+          </div>
+          <div class="participant-card-body">
+            <div class="participant-card-header">
+              <div>
+                <h3>${escapeHtml(participant.name)}</h3>
+                <p class="muted">${escapeHtml(participant.role)} · ${escapeHtml(participant.position)}</p>
+              </div>
+              <button type="button" data-participant-id="${escapeHtml(participant.id)}">${
+                activeClass ? "Диалог открыт" : "Открыть диалог"
+              }</button>
+            </div>
+            <div class="participant-details-grid">
+              <div class="participant-detail-block">
+                <p class="participant-detail-label">Связь с делом</p>
+                <p>${escapeHtml(participant.relation_to_case)}</p>
+              </div>
+              <div class="participant-detail-block">
+                <p class="participant-detail-label">Публичное описание</p>
+                <p>${escapeHtml(participant.public_description)}</p>
+              </div>
+              <div class="participant-detail-block">
+                <p class="participant-detail-label">Связи с другими участниками</p>
+                <ul class="participant-relationship-list">${relationships}</ul>
+              </div>
+            </div>
+            ${renderParticipantDialogue(participant, activeClass)}
+          </div>
+        </article>
       `;
     })
     .join("");
-
-  const participant = state.scenario.participants.find((item) => item.id === state.selectedParticipantId);
-  if (!participant) {
-    dom.participantDetailPanel.textContent = "Выберите участника, чтобы начать диалог.";
-    return;
-  }
-  dom.participantDetailPanel.innerHTML = `
-    <h3>${escapeHtml(participant.name)}</h3>
-    <p><strong>Роль:</strong> ${escapeHtml(participant.role)}</p>
-    <p><strong>Позиция:</strong> ${escapeHtml(participant.position)}</p>
-    <p><strong>Связь с делом:</strong> ${escapeHtml(participant.relation_to_case)}</p>
-    <p>${escapeHtml(participant.public_description)}</p>
-    <p><strong>Связи участника:</strong> ${escapeHtml(participant.relationships.join("; "))}</p>
-  `;
 }
 
 function renderRelationships() {
@@ -312,110 +419,6 @@ function renderEvidence() {
     <p>${escapeHtml(selectedEvidence.inspection_text)}</p>
     <p><strong>Что оно доказывает:</strong> ${escapeHtml(selectedEvidence.proves)}</p>
     <p><strong>Ключевое доказательство:</strong> ${selectedEvidence.key_evidence ? "да" : "нет"}</p>
-  `;
-}
-
-function renderDialoguePanels() {
-  const selectedParticipantId = state.selectedParticipantId;
-  const participantPanels = state.scenario.participants
-    .map((participant) => {
-      const active = participant.id === selectedParticipantId;
-      const actions = state.scenario.dialogue_actions.filter((action) => action.participant_id === participant.id);
-      const visibleActions = actions.filter(isDialogueVisible);
-      const history = getDialogueHistory(participant.id);
-      const historyHtml = history.length
-        ? history
-            .map(
-              (item) => `
-                <article class="dialogue-history-entry">
-                  <p class="dialogue-label">Вопрос</p>
-                  <p class="dialogue-question">${escapeHtml(item.question)}</p>
-                  <p class="dialogue-label">Ответ</p>
-                  <p class="dialogue-answer">${escapeHtml(item.answer)}</p>
-                  ${
-                    item.notes && item.notes.length
-                      ? `
-                        <div class="dialogue-history-notes">
-                          <p class="dialogue-label">Сопутствующие эффекты</p>
-                          <ul>
-                            ${item.notes.map((note) => `<li>${escapeHtml(note)}</li>`).join("")}
-                          </ul>
-                        </div>
-                      `
-                      : ""
-                  }
-                </article>
-              `
-            )
-            .join("")
-        : `<div class="dialogue-window-hint">Пока в истории этого участника нет реплик.</div>`;
-      const questionHtml = visibleActions.length
-        ? visibleActions
-            .map((action) => {
-              const asked = state.engine.askedQuestions.has(action.id);
-              const enabled = isDialogueAvailable(action);
-              return `
-                <button type="button" class="dialogue-question-button ${asked ? "is-asked" : ""}" data-action-id="${escapeHtml(action.id)}" ${
-                  enabled ? "" : "disabled"
-                }>
-                  ${escapeHtml(asked ? `${action.label} (уже задан)` : action.label)}
-                </button>
-              `;
-            })
-            .join("")
-        : `<div class="dialogue-window-hint">Пока для этого участника нет доступных вопросов.</div>`;
-
-      return `
-        <article class="dialogue-window ${active ? "active" : ""}">
-          <div class="dialogue-window-header">
-            <div>
-              <h3>${escapeHtml(participant.name)}</h3>
-              <p class="muted">${escapeHtml(participant.role)} · ${escapeHtml(participant.position)}</p>
-            </div>
-            <button type="button" data-participant-id="${escapeHtml(participant.id)}">${
-              active ? "Диалог открыт" : "Открыть диалог"
-            }</button>
-          </div>
-          <p class="dialogue-window-summary">${escapeHtml(participant.relation_to_case)}</p>
-          ${
-            active
-              ? `
-                <div class="dialogue-window-body">
-                  ${
-                    history.length
-                      ? `
-                        <div class="dialogue-history">
-                          ${historyHtml}
-                        </div>
-                      `
-                      : `<div class="dialogue-window-hint">Пока в этом диалоге нет вопросов. Выберите вопрос ниже, чтобы начать разговор.</div>`
-                  }
-                  <div class="dialogue-question-list">
-                    ${questionHtml}
-                  </div>
-                </div>
-              `
-              : `
-                <div class="dialogue-window-preview">
-                  ${history.length ? `<p>В истории уже ${history.length} реплик.</p>` : `<p>Выберите участника, чтобы открыть его диалог.</p>`}
-                </div>
-              `
-          }
-        </article>
-      `;
-    })
-    .join("");
-
-  dom.dialoguePanels.className = `dialogue-window-list${selectedParticipantId ? "" : " empty-state"}`;
-  dom.dialoguePanels.innerHTML = `
-    <div class="dialogue-section-hint">
-      ${
-        selectedParticipantId
-          ? "Активен диалог с выбранным участником. Вопросы и ответы показываются внутри его окна."
-          : "Выберите участника, чтобы начать диалог."
-      }
-    </div>
-    ${participantPanels}
   `;
 }
 
@@ -505,7 +508,6 @@ function renderAll() {
   }
   renderCaseIntro();
   renderParticipants();
-  renderDialoguePanels();
   renderRelationships();
   renderEvidence();
   renderEventLog();
