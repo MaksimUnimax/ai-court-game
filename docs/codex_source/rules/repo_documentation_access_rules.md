@@ -42,3 +42,4 @@ DOCS_TO_READ:
   - path: docs/codex_source/project/technical_spec.md
     why: project ТЗ for the current feature
     required: when feature ТЗ exists
+```
