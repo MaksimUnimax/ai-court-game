@@ -191,6 +191,11 @@ button:disabled {
   opacity: 0.45;
 }
 
+#delete-active-case-btn {
+  background: linear-gradient(180deg, #6d6258, #453a30);
+  box-shadow: 0 10px 20px rgba(35, 25, 16, 0.18);
+}
+
 .status-panel,
 .detail-panel,
 .empty-state,

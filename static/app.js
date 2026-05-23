@@ -4,6 +4,9 @@ const state = {
   loadedScenario: null,
   loadedScenarioMeta: null,
   loadedImageRegistry: null,
+  activeCaseRecord: null,
+  activeCaseNotice: "",
+  activeCaseError: "",
   selectedParticipantId: null,
   selectedEvidenceId: null,
   dialogueHistoryByParticipant: new Map(),
@@ -21,7 +24,9 @@ const dom = {
   casePackageInput: document.querySelector("#case-package-input"),
   loadDemoBtn: document.querySelector("#load-demo-btn"),
   startScenarioBtn: document.querySelector("#start-scenario-btn"),
+  deleteActiveCaseBtn: document.querySelector("#delete-active-case-btn"),
   validationPanel: document.querySelector("#validation-panel"),
+  activeCasePanel: document.querySelector("#active-case-status-panel"),
   caseIntroPanel: document.querySelector("#case-intro-panel"),
   visualAssetsPanel: document.querySelector("#visual-assets-panel"),
   participantsPanel: document.querySelector("#participants-panel"),
@@ -44,10 +49,27 @@ const dom = {
 };
 
 dom.startScenarioBtn.disabled = true;
+if (dom.deleteActiveCaseBtn) {
+  dom.deleteActiveCaseBtn.disabled = true;
+}
 
 const IMAGE_VIEWER_MIN_SCALE = 0.5;
 const IMAGE_VIEWER_MAX_SCALE = 4;
 const IMAGE_VIEWER_STEP = 0.2;
+const ACTIVE_CASE_DB_NAME = "ai-court-game";
+const ACTIVE_CASE_DB_VERSION = 1;
+const ACTIVE_CASE_STORE_NAME = "active_cases";
+const ACTIVE_CASE_STORAGE_KEY = "current";
+let activeCaseAsyncToken = 0;
+
+function beginActiveCaseAsyncOperation() {
+  activeCaseAsyncToken += 1;
+  return activeCaseAsyncToken;
+}
+
+function isActiveCaseAsyncOperationCurrent(token) {
+  return token === activeCaseAsyncToken;
+}
 
 const CONDITION_HANDLERS = {
   always: () => true,
@@ -107,6 +129,383 @@ function createEngine(initialState) {
   };
 }
 
+function createEmptyGameState() {
+  state.scenario = null;
+  state.engine = null;
+  state.selectedParticipantId = null;
+  state.selectedEvidenceId = null;
+  state.dialogueHistoryByParticipant = new Map();
+}
+
+function getSourceTypeLabel(sourceType) {
+  const labels = {
+    demo: "демо",
+    zip: "ZIP",
+    json_images: "JSON + изображения",
+  };
+  return labels[sourceType] || sourceType || "неизвестно";
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("Не удалось прочитать файл изображения."));
+    reader.readAsDataURL(file);
+  });
+}
+
+function serializeImageRegistry(registry) {
+  return {
+    by_path: Object.fromEntries(registry?.byPath || []),
+    by_basename: Object.fromEntries(registry?.byBasename || []),
+  };
+}
+
+function deserializeImageRegistry(images = {}) {
+  return createImageRegistryFromPackage(images);
+}
+
+function serializeEngineState(engine) {
+  if (!engine) {
+    return null;
+  }
+  return {
+    completed_actions: Array.from(engine.completedActions),
+    asked_questions: Array.from(engine.askedQuestions),
+    opened_evidence: Array.from(engine.openedEvidence),
+    discovered_facts: Array.from(engine.discoveredFacts),
+    found_contradictions: Array.from(engine.foundContradictions),
+    unlocked_questions: Array.from(engine.unlockedQuestions),
+    unlocked_evidence: Array.from(engine.unlockedEvidence),
+    enabled_verdicts: Array.from(engine.enabledVerdicts),
+    selected_verdict: engine.selectedVerdict,
+    finished: engine.finished,
+    event_log: engine.log || [],
+    notes: engine.notes || [],
+  };
+}
+
+function serializeDialogueHistory() {
+  const entries = {};
+  for (const [participantId, history] of state.dialogueHistoryByParticipant.entries()) {
+    entries[participantId] = history;
+  }
+  return entries;
+}
+
+function deserializeDialogueHistory(serialized = {}) {
+  return new Map(
+    Object.entries(serialized).map(([participantId, history]) => [
+      participantId,
+      Array.isArray(history) ? history : [],
+    ])
+  );
+}
+
+function serializeLoadedPackageMeta(meta) {
+  if (!meta) {
+    return null;
+  }
+  return {
+    sourceLabel: meta.sourceLabel || "",
+    sourceType: meta.sourceType || "",
+    packageType: meta.packageType || "",
+    archiveName: meta.archiveName || "",
+    archiveSizeBytes: Number.isFinite(meta.archiveSizeBytes) ? meta.archiveSizeBytes : null,
+    fileName: meta.fileName || "",
+    sizeBytes: Number.isFinite(meta.sizeBytes) ? meta.sizeBytes : null,
+    title: meta.title || "Без названия",
+    selectedImageCount: meta.selectedImageCount || 0,
+    matchedImageCount: meta.matchedImageCount || 0,
+    unmatchedImageCount: meta.unmatchedImageCount || 0,
+    warnings: Array.isArray(meta.warnings) ? meta.warnings : [],
+    validationErrors: Array.isArray(meta.validationErrors) ? meta.validationErrors : [],
+  };
+}
+
+function buildActiveCaseSnapshot() {
+  if (!state.loadedScenario || !state.loadedScenarioMeta) {
+    return null;
+  }
+  return {
+    key: ACTIVE_CASE_STORAGE_KEY,
+    version: ACTIVE_CASE_DB_VERSION,
+    saved_at: new Date().toISOString(),
+    scenario: state.loadedScenario,
+    images: serializeImageRegistry(state.loadedImageRegistry),
+    meta: serializeLoadedPackageMeta(state.loadedScenarioMeta),
+    engine_state: serializeEngineState(state.engine),
+    dialogue_history_by_participant: serializeDialogueHistory(),
+    ui_state: {
+      selected_participant_id: state.selectedParticipantId,
+      selected_evidence_id: state.selectedEvidenceId,
+    },
+    active_case_record: state.activeCaseRecord || null,
+  };
+}
+
+function openActiveCaseDatabase() {
+  if (!("indexedDB" in window)) {
+    return Promise.reject(new Error("IndexedDB недоступен в этом браузере."));
+  }
+
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(ACTIVE_CASE_DB_NAME, ACTIVE_CASE_DB_VERSION);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(ACTIVE_CASE_STORE_NAME)) {
+        db.createObjectStore(ACTIVE_CASE_STORE_NAME, { keyPath: "key" });
+      }
+    };
+    request.onerror = () => reject(request.error || new Error("Не удалось открыть хранилище браузера."));
+    request.onsuccess = () => resolve(request.result);
+  });
+}
+
+async function readActiveCaseSnapshot() {
+  const db = await openActiveCaseDatabase();
+  try {
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction(ACTIVE_CASE_STORE_NAME, "readonly");
+      const store = tx.objectStore(ACTIVE_CASE_STORE_NAME);
+      const request = store.get(ACTIVE_CASE_STORAGE_KEY);
+      request.onerror = () => reject(request.error || new Error("Не удалось прочитать активное дело."));
+      request.onsuccess = () => resolve(request.result || null);
+    });
+  } finally {
+    db.close();
+  }
+}
+
+async function writeActiveCaseSnapshot(snapshot) {
+  const db = await openActiveCaseDatabase();
+  try {
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(ACTIVE_CASE_STORE_NAME, "readwrite");
+      const store = tx.objectStore(ACTIVE_CASE_STORE_NAME);
+      const request = store.put(snapshot);
+      request.onerror = () => reject(request.error || new Error("Не удалось сохранить активное дело."));
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error || new Error("Не удалось сохранить активное дело."));
+      tx.onabort = () => reject(tx.error || new Error("Не удалось сохранить активное дело."));
+    });
+  } finally {
+    db.close();
+  }
+}
+
+async function deleteActiveCaseSnapshot() {
+  const db = await openActiveCaseDatabase();
+  try {
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(ACTIVE_CASE_STORE_NAME, "readwrite");
+      const store = tx.objectStore(ACTIVE_CASE_STORE_NAME);
+      const request = store.delete(ACTIVE_CASE_STORAGE_KEY);
+      request.onerror = () => reject(request.error || new Error("Не удалось удалить активное дело."));
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error || new Error("Не удалось удалить активное дело."));
+      tx.onabort = () => reject(tx.error || new Error("Не удалось удалить активное дело."));
+    });
+  } finally {
+    db.close();
+  }
+}
+
+function buildActiveCaseRecordFromSnapshot(snapshot, meta) {
+  const packageStatus = snapshot.engine_state
+    ? snapshot.engine_state.finished
+      ? "finished"
+      : "started"
+    : "loaded";
+  return {
+    title: meta?.title || getScenarioTitle(snapshot.scenario),
+    sourceType: meta?.sourceType || meta?.packageType || "",
+    sourceLabel: meta?.sourceLabel || "",
+    savedAt: snapshot.saved_at || new Date().toISOString(),
+    selectedImageCount: meta?.selectedImageCount || 0,
+    packageStatus,
+    gameplayStarted: Boolean(snapshot.engine_state),
+  };
+}
+
+function restoreSnapshotIntoState(snapshot) {
+  if (!snapshot || !snapshot.scenario) {
+    throw new Error("Сохранённое активное дело повреждено.");
+  }
+  const meta = snapshot.meta || {};
+  state.loadedScenario = snapshot.scenario;
+  state.loadedImageRegistry = deserializeImageRegistry(snapshot.images || {});
+  state.loadedScenarioMeta = {
+    sourceLabel: meta.sourceLabel || "Память браузера",
+    sourceType: meta.sourceType || meta.packageType || "",
+    packageType: meta.packageType || meta.sourceType || "",
+    archiveName: meta.archiveName || "",
+    archiveSizeBytes: meta.archiveSizeBytes || null,
+    fileName: meta.fileName || "",
+    sizeBytes: meta.sizeBytes || null,
+    title: meta.title || getScenarioTitle(snapshot.scenario),
+    selectedImageCount: meta.selectedImageCount || 0,
+    matchedImageCount: meta.matchedImageCount || 0,
+    unmatchedImageCount: meta.unmatchedImageCount || 0,
+    warnings: Array.isArray(meta.warnings) ? meta.warnings : [],
+    validationErrors: Array.isArray(meta.validationErrors) ? meta.validationErrors : [],
+  };
+  state.activeCaseRecord = snapshot.active_case_record || buildActiveCaseRecordFromSnapshot(snapshot, state.loadedScenarioMeta);
+  state.activeCaseNotice = "Активное дело восстановлено из памяти браузера.";
+  state.activeCaseError = "";
+  updateLoadedPackageButtons();
+
+  if (snapshot.engine_state) {
+    state.scenario = snapshot.scenario;
+    state.engine = createEngine(snapshot.engine_state);
+    state.selectedParticipantId = snapshot.ui_state?.selected_participant_id || null;
+    state.selectedEvidenceId = snapshot.ui_state?.selected_evidence_id || null;
+    state.dialogueHistoryByParticipant = deserializeDialogueHistory(snapshot.dialogue_history_by_participant || {});
+    renderLoadedPackageStatus("Активное дело восстановлено из памяти браузера.");
+    renderAll();
+  } else {
+    clearCurrentRuntimeState();
+    resetGamePanelsToEmptyState();
+    renderLoadedPackageStatus("Активное дело восстановлено из памяти браузера.");
+  }
+
+  renderActiveCaseStatus();
+}
+
+let persistQueue = Promise.resolve();
+
+function queueActiveCasePersistence() {
+  const snapshot = buildActiveCaseSnapshot();
+  if (!snapshot) {
+    return Promise.resolve();
+  }
+  if (state.activeCaseRecord) {
+    state.activeCaseRecord = {
+      ...state.activeCaseRecord,
+      packageStatus: state.engine ? (state.engine.finished ? "finished" : "started") : state.activeCaseRecord.packageStatus || "loaded",
+      gameplayStarted: Boolean(state.engine),
+      savedAt: snapshot.saved_at,
+    };
+  }
+  state.activeCaseNotice = "Активное дело сохранено в памяти браузера.";
+  state.activeCaseError = "";
+  renderActiveCaseStatus();
+  persistQueue = persistQueue
+    .catch(() => {})
+    .then(() => writeActiveCaseSnapshot(snapshot));
+  persistQueue.catch((error) => {
+    state.activeCaseError = `Не удалось сохранить активное дело: ${error.message}`;
+    renderActiveCaseStatus();
+  });
+  return persistQueue;
+}
+
+function resetGamePanelsToEmptyState() {
+  if (dom.caseIntroPanel) {
+    dom.caseIntroPanel.className = "empty-state";
+    dom.caseIntroPanel.textContent = "Запустите сценарий, чтобы увидеть брифинг дела.";
+  }
+  if (dom.visualAssetsPanel) {
+    dom.visualAssetsPanel.className = "visual-assets-grid empty-state";
+    dom.visualAssetsPanel.textContent = "Иллюстрации появятся после загрузки пакета дела.";
+  }
+  if (dom.participantsPanel) {
+    dom.participantsPanel.className = "participant-grid";
+    dom.participantsPanel.innerHTML = "";
+  }
+  if (dom.relationshipsPanel) {
+    dom.relationshipsPanel.className = "relationship-list empty-state";
+    dom.relationshipsPanel.textContent = "Отношения появятся здесь после запуска сценария.";
+  }
+  if (dom.evidencePanel) {
+    dom.evidencePanel.className = "card-list empty-state";
+    dom.evidencePanel.textContent = "Пока нет видимых доказательств.";
+  }
+  if (dom.evidenceDetailPanel) {
+    dom.evidenceDetailPanel.className = "detail-panel empty-state";
+    dom.evidenceDetailPanel.textContent = "Нажмите на доказательство, чтобы изучить его.";
+  }
+  if (dom.eventLogPanel) {
+    dom.eventLogPanel.className = "log-list empty-state";
+    dom.eventLogPanel.textContent = "События пока не записаны.";
+  }
+  if (dom.verdictPanel) {
+    dom.verdictPanel.className = "card-list empty-state";
+    dom.verdictPanel.textContent = "Варианты вердикта пока не доступны.";
+  }
+  if (dom.finalExplanationPanel) {
+    dom.finalExplanationPanel.className = "empty-state";
+    dom.finalExplanationPanel.textContent = "Финальное объяснение появится после выбора вердикта.";
+  }
+}
+
+function updateLoadedPackageButtons() {
+  dom.startScenarioBtn.disabled = !state.loadedScenario || Boolean(state.engine);
+}
+
+function renderActiveCaseStatus() {
+  if (!dom.activeCasePanel) {
+    return;
+  }
+
+  const record = state.activeCaseRecord;
+  const sourceType = record?.sourceType || state.loadedScenarioMeta?.sourceType || "";
+  const hasRecord = Boolean(record);
+  const gameplayStatus = state.engine
+    ? state.engine.finished
+      ? "Сценарий завершён"
+      : "Сценарий запущен"
+    : hasRecord
+      ? "Пакет сохранён, сценарий можно запустить"
+      : "Активное дело не сохранено";
+
+  const statusLine = state.activeCaseError
+    ? `<p><strong>Статус:</strong> ${escapeHtml(state.activeCaseError)}</p>`
+    : state.activeCaseNotice
+      ? `<p><strong>Статус:</strong> ${escapeHtml(state.activeCaseNotice)}</p>`
+      : `<p><strong>Статус:</strong> ${escapeHtml(gameplayStatus)}</p>`;
+
+  if (!hasRecord && !state.activeCaseError) {
+    dom.activeCasePanel.className = "status-panel empty-state";
+    dom.activeCasePanel.innerHTML = `
+      <p><strong>Активное дело:</strong> не сохранено в памяти браузера.</p>
+      <p>Загрузите ZIP-пакет, JSON + изображения или демо-сценарий, чтобы создать локальное сохранение.</p>
+      ${statusLine}
+    `;
+    if (dom.deleteActiveCaseBtn) {
+      dom.deleteActiveCaseBtn.disabled = true;
+    }
+    return;
+  }
+
+  const savedAt = record?.savedAt ? new Date(record.savedAt).toLocaleString("ru-RU") : "неизвестно";
+  const imageCount = Number.isFinite(record?.selectedImageCount) ? record.selectedImageCount : state.loadedScenarioMeta?.selectedImageCount || 0;
+  const packageStatus = state.engine
+    ? state.engine.finished
+      ? "сохранён с завершённым сценарием"
+      : "сохранён с текущим прохождением"
+    : record?.packageStatus === "finished"
+      ? "сохранён с завершённым сценарием"
+      : record?.packageStatus === "started"
+        ? "сохранён с текущим прохождением"
+        : "сохранён без запущенного сценария";
+
+  dom.activeCasePanel.className = state.activeCaseError ? "status-panel status-error" : "status-panel status-ok";
+  dom.activeCasePanel.innerHTML = `
+    <p><strong>Активное дело:</strong> ${escapeHtml(record?.title || state.loadedScenarioMeta?.title || "Без названия")}</p>
+    <p><strong>Источник:</strong> ${escapeHtml(getSourceTypeLabel(sourceType))}</p>
+    <p><strong>Статус пакета:</strong> ${escapeHtml(packageStatus)}</p>
+    <p><strong>Иллюстраций:</strong> ${escapeHtml(String(imageCount))}</p>
+    <p><strong>Сохранено:</strong> ${escapeHtml(savedAt)}</p>
+    ${statusLine}
+    <p class="muted">Активное дело сохраняется локально в браузере. Серверного хранения нет.</p>
+  `;
+  if (dom.deleteActiveCaseBtn) {
+    dom.deleteActiveCaseBtn.disabled = false;
+  }
+}
+
 function renderValidation(message, isError = false) {
   dom.validationPanel.className = `status-panel ${isError ? "status-error" : "status-ok"}`;
   dom.validationPanel.innerHTML = escapeStatusHtml(message);
@@ -114,15 +513,30 @@ function renderValidation(message, isError = false) {
 
 function clearLoadedPackage() {
   closeImageViewer();
-  if (state.loadedImageRegistry && Array.isArray(state.loadedImageRegistry.revokeUrls)) {
-    for (const url of state.loadedImageRegistry.revokeUrls) {
-      URL.revokeObjectURL(url);
-    }
+  if (state.loadedImageRegistry) {
+    revokeImageRegistry(state.loadedImageRegistry);
   }
   state.loadedScenario = null;
   state.loadedScenarioMeta = null;
   state.loadedImageRegistry = null;
-  dom.startScenarioBtn.disabled = true;
+  updateLoadedPackageButtons();
+}
+
+function clearActiveCaseState() {
+  state.activeCaseRecord = null;
+  state.activeCaseNotice = "";
+  state.activeCaseError = "";
+  clearLoadedPackage();
+  createEmptyGameState();
+  resetGamePanelsToEmptyState();
+  renderActiveCaseStatus();
+  renderValidation("Сценарий пока не загружен.");
+}
+
+function clearCurrentRuntimeState() {
+  createEmptyGameState();
+  state.selectedParticipantId = null;
+  state.selectedEvidenceId = null;
 }
 
 function formatBytes(bytes) {
@@ -201,13 +615,19 @@ function createEmptyImageRegistry() {
   };
 }
 
-function createImageRegistry(imageFiles) {
+async function createImageRegistryFromFiles(imageFiles) {
   const registry = createEmptyImageRegistry();
-  for (const file of imageFiles) {
-    const url = URL.createObjectURL(file);
+  const imageEntries = await Promise.all(
+    imageFiles.map(async (file) => ({
+      file,
+      dataUrl: await readFileAsDataUrl(file),
+    }))
+  );
+  for (const entry of imageEntries) {
+    const url = entry.dataUrl;
+    const file = entry.file;
     const pathKey = normalizeLookupPath(file.name);
     const basenameKey = basenameFromPath(file.name);
-    registry.revokeUrls.push(url);
     registry.byPath.set(pathKey, url);
     if (!registry.byBasename.has(basenameKey)) {
       registry.byBasename.set(basenameKey, url);
@@ -356,6 +776,9 @@ function renderLoadedPackageStatus(statusText, isError = false) {
 
   const parts = [
     `<p><strong>Источник:</strong> ${escapeHtml(source.sourceLabel)}</p>`,
+    source.sourceType
+      ? `<p><strong>Тип источника:</strong> ${escapeHtml(getSourceTypeLabel(source.sourceType))}</p>`
+      : "",
     source.packageType === "zip" && source.archiveName
       ? `<p><strong>ZIP-архив:</strong> ${escapeHtml(source.archiveName)}</p>`
       : source.fileName
@@ -430,7 +853,7 @@ function getVisualAssetMatchCount(scenario, registry) {
   }).length;
 }
 
-async function loadCasePackageFromZip(zipFile, sourceLabel) {
+async function loadCasePackageFromZip(zipFile, sourceLabel, operationToken) {
   const formData = new FormData();
   formData.append("package", zipFile, zipFile.name);
   const response = await fetch("/api/import-case-package", {
@@ -447,33 +870,21 @@ async function loadCasePackageFromZip(zipFile, sourceLabel) {
   const warnings = Array.isArray(data.warnings) ? data.warnings : [];
 
   if (!validation.ok) {
-    state.loadedScenarioMeta = {
-      sourceLabel,
-      packageType: "zip",
-      archiveName: packageSummary.archive_name || zipFile.name,
-      archiveSizeBytes: packageSummary.archive_size_bytes || zipFile.size,
-      title: packageSummary.scenario_title || "Без названия",
-      selectedImageCount: packageSummary.image_count || 0,
-      matchedImageCount: packageSummary.matched_image_count || 0,
-      unmatchedImageCount: packageSummary.unmatched_image_count || 0,
-      warnings,
-      validationErrors: validation.errors || [],
-    };
-    state.loadedScenario = null;
-    state.loadedImageRegistry = createEmptyImageRegistry();
-    dom.startScenarioBtn.disabled = true;
-    renderLoadedPackageStatus("ZIP-пакет не прошёл проверку сценария.", true);
+    renderValidation("ZIP-пакет не прошёл проверку сценария.", true);
     return;
   }
 
-  if (state.loadedImageRegistry) {
-    closeImageViewer();
-    revokeImageRegistry(state.loadedImageRegistry);
+  if (operationToken !== undefined && !isActiveCaseAsyncOperationCurrent(operationToken)) {
+    return;
   }
+
+  clearLoadedPackage();
+  clearCurrentRuntimeState();
   state.loadedScenario = data.scenario;
   state.loadedImageRegistry = createImageRegistryFromPackage(data.images);
   state.loadedScenarioMeta = {
     sourceLabel,
+    sourceType: "zip",
     packageType: "zip",
     archiveName: packageSummary.archive_name || zipFile.name,
     archiveSizeBytes: packageSummary.archive_size_bytes || zipFile.size,
@@ -483,12 +894,25 @@ async function loadCasePackageFromZip(zipFile, sourceLabel) {
     unmatchedImageCount: packageSummary.unmatched_image_count || 0,
     warnings,
   };
-  dom.startScenarioBtn.disabled = false;
+  state.activeCaseRecord = {
+    title: state.loadedScenarioMeta.title,
+    sourceType: state.loadedScenarioMeta.sourceType,
+    sourceLabel: state.loadedScenarioMeta.sourceLabel,
+    savedAt: new Date().toISOString(),
+    selectedImageCount: state.loadedScenarioMeta.selectedImageCount,
+    packageStatus: "loaded",
+    gameplayStarted: false,
+  };
+  state.activeCaseNotice = "Активное дело сохранено в памяти браузера.";
+  state.activeCaseError = "";
+  updateLoadedPackageButtons();
+  resetGamePanelsToEmptyState();
   renderLoadedPackageStatus("ZIP-пакет дела прочитан и проверен.");
+  renderActiveCaseStatus();
+  void queueActiveCasePersistence();
 }
 
-async function loadCasePackageFromFiles(files, sourceLabel) {
-  clearLoadedPackage();
+async function loadCasePackageFromFiles(files, sourceLabel, operationToken) {
   const fileList = Array.from(files || []);
   const zipFiles = fileList.filter(isZipFile);
   const jsonFiles = fileList.filter(isJsonFile);
@@ -501,7 +925,7 @@ async function loadCasePackageFromFiles(files, sourceLabel) {
     if (zipFiles.length > 1 || jsonFiles.length || imageFiles.length || unsupportedFiles.length) {
       throw new Error("Выберите либо один ZIP-архив, либо JSON-сценарий с изображениями, но не оба варианта одновременно.");
     }
-    await loadCasePackageFromZip(zipFiles[0], "ZIP-пакет дела");
+    await loadCasePackageFromZip(zipFiles[0], "ZIP-пакет дела", operationToken);
     return;
   }
 
@@ -516,7 +940,7 @@ async function loadCasePackageFromFiles(files, sourceLabel) {
   }
 
   const scenarioFile = jsonFiles[0];
-  const imageRegistry = createImageRegistry(imageFiles);
+  let imageRegistry = createEmptyImageRegistry();
 
   try {
     const raw = await readFileAsText(scenarioFile);
@@ -536,16 +960,24 @@ async function loadCasePackageFromFiles(files, sourceLabel) {
       throw new Error(validation.errors?.join("<br>") || "JSON-файл не прошёл проверку сценария.");
     }
 
-    if (state.loadedImageRegistry) {
-      closeImageViewer();
-      revokeImageRegistry(state.loadedImageRegistry);
+    if (operationToken !== undefined && !isActiveCaseAsyncOperationCurrent(operationToken)) {
+      return;
     }
+
+    imageRegistry = await createImageRegistryFromFiles(imageFiles);
+    if (operationToken !== undefined && !isActiveCaseAsyncOperationCurrent(operationToken)) {
+      revokeImageRegistry(imageRegistry);
+      return;
+    }
+    const matchedImageCount = getVisualAssetMatchCount(scenario, imageRegistry);
+    clearLoadedPackage();
+    clearCurrentRuntimeState();
     state.loadedScenario = scenario;
     state.loadedImageRegistry = imageRegistry;
-    const matchedImageCount = getVisualAssetMatchCount(scenario, imageRegistry);
     state.loadedScenarioMeta = {
       sourceLabel,
-      packageType: "files",
+      sourceType: "json_images",
+      packageType: "json_images",
       fileName: scenarioFile.name,
       sizeBytes: scenarioFile.size,
       title: getScenarioTitle(scenario),
@@ -554,11 +986,24 @@ async function loadCasePackageFromFiles(files, sourceLabel) {
       unmatchedImageCount: Math.max(0, imageFiles.length - matchedImageCount),
       warnings: [],
     };
-    dom.startScenarioBtn.disabled = false;
+    state.activeCaseRecord = {
+      title: state.loadedScenarioMeta.title,
+      sourceType: state.loadedScenarioMeta.sourceType,
+      sourceLabel: state.loadedScenarioMeta.sourceLabel,
+      savedAt: new Date().toISOString(),
+      selectedImageCount: state.loadedScenarioMeta.selectedImageCount,
+      packageStatus: "loaded",
+      gameplayStarted: false,
+    };
+    state.activeCaseNotice = "Активное дело сохранено в памяти браузера.";
+    state.activeCaseError = "";
+    updateLoadedPackageButtons();
+    resetGamePanelsToEmptyState();
     renderLoadedPackageStatus("Пакет дела прочитан и проверен.");
+    renderActiveCaseStatus();
+    void queueActiveCasePersistence();
   } catch (error) {
     revokeImageRegistry(imageRegistry);
-    renderValidation(`Ошибка загрузки пакета дела: ${error.message}`, true);
     throw error;
   }
 }
@@ -1061,8 +1506,21 @@ function startScenarioFromResponse(data) {
   state.selectedParticipantId = null;
   state.selectedEvidenceId = null;
   state.dialogueHistoryByParticipant = new Map();
+  if (state.activeCaseRecord) {
+    state.activeCaseRecord = {
+      ...state.activeCaseRecord,
+      packageStatus: state.engine.finished ? "finished" : "started",
+      gameplayStarted: true,
+      savedAt: new Date().toISOString(),
+    };
+  }
+  state.activeCaseNotice = "Активное дело сохранено в памяти браузера.";
+  state.activeCaseError = "";
+  updateLoadedPackageButtons();
   renderLoadedPackageStatus("Сценарий запущен. Кликайте по участникам, доказательствам и вердиктам, чтобы протестировать граф.");
   renderAll();
+  renderActiveCaseStatus();
+  void queueActiveCasePersistence();
 }
 
 function handleDialogueClick(actionId) {
@@ -1086,6 +1544,15 @@ function handleDialogueClick(actionId) {
   });
   applyEffects(action.effects, action);
   renderAll();
+  if (state.activeCaseRecord) {
+    state.activeCaseRecord = {
+      ...state.activeCaseRecord,
+      packageStatus: state.engine.finished ? "finished" : "started",
+      gameplayStarted: true,
+      savedAt: new Date().toISOString(),
+    };
+  }
+  void queueActiveCasePersistence();
 }
 
 function handleEvidenceClick(evidenceId) {
@@ -1104,6 +1571,15 @@ function handleEvidenceClick(evidenceId) {
     applyEffects(evidence.effects, evidence);
   }
   renderAll();
+  if (state.activeCaseRecord) {
+    state.activeCaseRecord = {
+      ...state.activeCaseRecord,
+      packageStatus: state.engine.finished ? "finished" : "started",
+      gameplayStarted: true,
+      savedAt: new Date().toISOString(),
+    };
+  }
+  void queueActiveCasePersistence();
 }
 
 function handleVerdictClick(verdictId) {
@@ -1115,9 +1591,19 @@ function handleVerdictClick(verdictId) {
   state.engine.finished = true;
   state.engine.log.push({ type: "verdict", text: `Выбран вердикт: ${verdict.label}` });
   renderAll();
+  if (state.activeCaseRecord) {
+    state.activeCaseRecord = {
+      ...state.activeCaseRecord,
+      packageStatus: "finished",
+      gameplayStarted: true,
+      savedAt: new Date().toISOString(),
+    };
+  }
+  void queueActiveCasePersistence();
 }
 
 dom.loadDemoBtn.addEventListener("click", async () => {
+  const operationToken = beginActiveCaseAsyncOperation();
   try {
     const response = await fetch("/api/demo-scenario");
     const data = await response.json();
@@ -1125,11 +1611,16 @@ dom.loadDemoBtn.addEventListener("click", async () => {
     if (!validation.ok) {
       throw new Error(validation.errors?.join("<br>") || "Демо-сценарий не прошёл проверку.");
     }
+    if (!isActiveCaseAsyncOperationCurrent(operationToken)) {
+      return;
+    }
     clearLoadedPackage();
+    clearCurrentRuntimeState();
     state.loadedScenario = data;
     state.loadedImageRegistry = createEmptyImageRegistry();
     state.loadedScenarioMeta = {
       sourceLabel: "Встроенный демо-пакет",
+      sourceType: "demo",
       packageType: "demo",
       fileName: "demo_case.json",
       sizeBytes: new Blob([JSON.stringify(data)]).size,
@@ -1139,34 +1630,65 @@ dom.loadDemoBtn.addEventListener("click", async () => {
       unmatchedImageCount: 0,
       warnings: [],
     };
-    dom.startScenarioBtn.disabled = false;
+    state.activeCaseRecord = {
+      title: state.loadedScenarioMeta.title,
+      sourceType: state.loadedScenarioMeta.sourceType,
+      sourceLabel: state.loadedScenarioMeta.sourceLabel,
+      savedAt: new Date().toISOString(),
+      selectedImageCount: 0,
+      packageStatus: "loaded",
+      gameplayStarted: false,
+    };
+    state.activeCaseNotice = "Активное дело сохранено в памяти браузера.";
+    state.activeCaseError = "";
+    updateLoadedPackageButtons();
+    resetGamePanelsToEmptyState();
     dom.casePackageInput.value = "";
     renderLoadedPackageStatus("Демо-пакет проверен и готов к запуску.");
+    renderActiveCaseStatus();
+    void queueActiveCasePersistence();
   } catch (error) {
+    if (!isActiveCaseAsyncOperationCurrent(operationToken)) {
+      return;
+    }
     renderValidation(`Не удалось загрузить демо-сценарий: ${error.message}`, true);
-    clearLoadedPackage();
   }
 });
 
 dom.casePackageInput.addEventListener("change", async () => {
+  const operationToken = beginActiveCaseAsyncOperation();
   try {
     if (!dom.casePackageInput.files || !dom.casePackageInput.files.length) {
       throw new Error("Пакет дела не выбран.");
     }
-    await loadCasePackageFromFiles(dom.casePackageInput.files, "Пакет дела");
+    await loadCasePackageFromFiles(dom.casePackageInput.files, "Пакет дела", operationToken);
   } catch (error) {
+    if (!isActiveCaseAsyncOperationCurrent(operationToken)) {
+      return;
+    }
     renderValidation(`Ошибка загрузки пакета дела: ${error.message}`, true);
   }
 });
 
 dom.startScenarioBtn.addEventListener("click", async () => {
+  const operationToken = beginActiveCaseAsyncOperation();
   try {
     if (!state.loadedScenario) {
       throw new Error("Сначала загрузите JSON-файл сценария или демо-сценарий.");
     }
+    if (state.engine) {
+      renderLoadedPackageStatus("Сценарий уже запущен и сохранён в памяти браузера.");
+      return;
+    }
     const data = await postJson("/api/start-scenario", state.loadedScenario);
+    if (!isActiveCaseAsyncOperationCurrent(operationToken)) {
+      return;
+    }
     startScenarioFromResponse(data);
   } catch (error) {
+    if (!isActiveCaseAsyncOperationCurrent(operationToken)) {
+      return;
+    }
     if (state.loadedScenarioMeta) {
       renderLoadedPackageStatus(error.message, true);
     } else {
@@ -1174,6 +1696,50 @@ dom.startScenarioBtn.addEventListener("click", async () => {
     }
   }
 });
+
+if (dom.deleteActiveCaseBtn) {
+  dom.deleteActiveCaseBtn.addEventListener("click", async () => {
+    if (!state.loadedScenario && !state.activeCaseRecord && !state.activeCaseError) {
+      return;
+    }
+    const confirmed = window.confirm("Удалить активное дело из памяти браузера и очистить текущий сценарий?");
+    if (!confirmed) {
+      return;
+    }
+    beginActiveCaseAsyncOperation();
+    if (dom.casePackageInput) {
+      dom.casePackageInput.disabled = true;
+    }
+    if (dom.loadDemoBtn) {
+      dom.loadDemoBtn.disabled = true;
+    }
+    dom.startScenarioBtn.disabled = true;
+    dom.deleteActiveCaseBtn.disabled = true;
+
+    try {
+      await persistQueue.catch(() => {});
+      await deleteActiveCaseSnapshot();
+      clearActiveCaseState();
+      state.activeCaseNotice = "Активное дело удалено из памяти браузера.";
+      state.activeCaseError = "";
+      if (dom.casePackageInput) {
+        dom.casePackageInput.value = "";
+      }
+      renderValidation("Активное дело удалено. Теперь можно загрузить новый пакет.");
+    } catch (error) {
+      state.activeCaseError = `Не удалось удалить активное дело: ${error.message}`;
+    } finally {
+      if (dom.casePackageInput) {
+        dom.casePackageInput.disabled = false;
+      }
+      if (dom.loadDemoBtn) {
+        dom.loadDemoBtn.disabled = false;
+      }
+      updateLoadedPackageButtons();
+      renderActiveCaseStatus();
+    }
+  });
+}
 
 if (dom.imageViewerModal) {
   dom.imageViewerModal.addEventListener("click", (event) => {
@@ -1234,6 +1800,7 @@ document.addEventListener("click", (event) => {
   if (participantId) {
     state.selectedParticipantId = participantId;
     renderAll();
+    void queueActiveCasePersistence();
   }
 
   const evidenceId = targetElement?.getAttribute("data-evidence-id");
@@ -1251,3 +1818,24 @@ document.addEventListener("click", (event) => {
     handleVerdictClick(verdictId);
   }
 });
+
+async function bootstrapActiveCaseRestore() {
+  try {
+    const snapshot = await readActiveCaseSnapshot();
+    if (snapshot) {
+      restoreSnapshotIntoState(snapshot);
+      return;
+    }
+    renderActiveCaseStatus();
+    updateLoadedPackageButtons();
+  } catch (error) {
+    state.activeCaseError = `Не удалось восстановить активное дело из памяти браузера: ${error.message}`;
+    state.activeCaseNotice = "";
+    state.activeCaseRecord = null;
+    renderActiveCaseStatus();
+  }
+}
+
+renderActiveCaseStatus();
+updateLoadedPackageButtons();
+void bootstrapActiveCaseRestore();
