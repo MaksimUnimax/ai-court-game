@@ -4,11 +4,14 @@ const state = {
   loadedScenario: null,
   loadedScenarioMeta: null,
   loadedImageRegistry: null,
+  loadedAudioRegistry: null,
   activeCaseRecord: null,
   activeCaseNotice: "",
   activeCaseError: "",
   selectedParticipantId: null,
   selectedEvidenceId: null,
+  audioAutoPlayEnabled: true,
+  dialogueAudioPlayer: null,
   dialogueHistoryByParticipant: new Map(),
   imageViewer: {
     open: false,
@@ -25,6 +28,7 @@ const dom = {
   loadDemoBtn: document.querySelector("#load-demo-btn"),
   startScenarioBtn: document.querySelector("#start-scenario-btn"),
   deleteActiveCaseBtn: document.querySelector("#delete-active-case-btn"),
+  voiceToggleBtn: document.querySelector("#voice-toggle-btn"),
   validationPanel: document.querySelector("#validation-panel"),
   activeCasePanel: document.querySelector("#active-case-status-panel"),
   caseIntroPanel: document.querySelector("#case-intro-panel"),
@@ -52,6 +56,10 @@ dom.startScenarioBtn.disabled = true;
 if (dom.deleteActiveCaseBtn) {
   dom.deleteActiveCaseBtn.disabled = true;
 }
+if (dom.voiceToggleBtn) {
+  dom.voiceToggleBtn.disabled = false;
+}
+updateVoiceToggleButton();
 
 const IMAGE_VIEWER_MIN_SCALE = 0.5;
 const IMAGE_VIEWER_MAX_SCALE = 4;
@@ -137,11 +145,102 @@ function createEmptyGameState() {
   state.dialogueHistoryByParticipant = new Map();
 }
 
+function ensureDialogueAudioPlayer() {
+  if (state.dialogueAudioPlayer) {
+    return state.dialogueAudioPlayer;
+  }
+  const audio = new Audio();
+  audio.preload = "auto";
+  audio.addEventListener("ended", () => {
+    if (state.dialogueAudioPlayer) {
+      state.dialogueAudioPlayer.currentActionId = null;
+      state.dialogueAudioPlayer.isPlaying = false;
+    }
+    if (state.scenario && state.engine) {
+      renderAll();
+    }
+  });
+  audio.addEventListener("pause", () => {
+    if (state.dialogueAudioPlayer) {
+      state.dialogueAudioPlayer.isPlaying = false;
+    }
+    if (state.scenario && state.engine) {
+      renderAll();
+    }
+  });
+  audio.addEventListener("play", () => {
+    if (state.dialogueAudioPlayer) {
+      state.dialogueAudioPlayer.isPlaying = true;
+    }
+    if (state.scenario && state.engine) {
+      renderAll();
+    }
+  });
+  state.dialogueAudioPlayer = {
+    element: audio,
+    currentActionId: null,
+    currentUrl: "",
+    isPlaying: false,
+  };
+  return state.dialogueAudioPlayer;
+}
+
+function stopDialogueAudio() {
+  const player = ensureDialogueAudioPlayer();
+  player.element.pause();
+  player.element.removeAttribute("src");
+  player.element.load();
+  player.currentActionId = null;
+  player.currentUrl = "";
+  player.isPlaying = false;
+}
+
+function updateVoiceToggleButton() {
+  if (!dom.voiceToggleBtn) {
+    return;
+  }
+  dom.voiceToggleBtn.textContent = state.audioAutoPlayEnabled ? "Голос: включён" : "Голос: выключен";
+  dom.voiceToggleBtn.setAttribute("aria-pressed", state.audioAutoPlayEnabled ? "true" : "false");
+}
+
+async function playDialogueAudioByActionId(actionId, { autoplay = false } = {}) {
+  const asset = getDialogueAudioAsset(actionId);
+  if (!asset) {
+    return false;
+  }
+  const url = getDialogueAudioUrl(asset);
+  if (!url) {
+    if (!autoplay) {
+      renderValidation("Не удалось найти аудиофайл для этой реплики.", true);
+    }
+    return false;
+  }
+  const player = ensureDialogueAudioPlayer();
+  stopDialogueAudio();
+  player.currentActionId = actionId;
+  player.currentUrl = url;
+  player.element.src = url;
+  player.element.currentTime = 0;
+  try {
+    await player.element.play();
+    return true;
+  } catch (error) {
+    player.currentActionId = null;
+    player.currentUrl = "";
+    player.isPlaying = false;
+    if (!autoplay || error?.name !== "NotAllowedError") {
+      renderValidation(`Не удалось воспроизвести аудио реплики: ${error.message}`, true);
+    }
+    return false;
+  }
+}
+
 function getSourceTypeLabel(sourceType) {
   const labels = {
     demo: "демо",
     zip: "ZIP",
     json_images: "JSON + изображения",
+    json_files: "JSON + файлы",
   };
   return labels[sourceType] || sourceType || "неизвестно";
 }
@@ -164,6 +263,17 @@ function serializeImageRegistry(registry) {
 
 function deserializeImageRegistry(images = {}) {
   return createImageRegistryFromPackage(images);
+}
+
+function serializeAudioRegistry(registry) {
+  return {
+    by_path: Object.fromEntries(registry?.byPath || []),
+    by_basename: Object.fromEntries(registry?.byBasename || []),
+  };
+}
+
+function deserializeAudioRegistry(audio = {}) {
+  return createAudioRegistryFromPackage(audio);
 }
 
 function serializeEngineState(engine) {
@@ -219,6 +329,9 @@ function serializeLoadedPackageMeta(meta) {
     selectedImageCount: meta.selectedImageCount || 0,
     matchedImageCount: meta.matchedImageCount || 0,
     unmatchedImageCount: meta.unmatchedImageCount || 0,
+    selectedAudioCount: meta.selectedAudioCount || 0,
+    matchedAudioCount: meta.matchedAudioCount || 0,
+    unmatchedAudioCount: meta.unmatchedAudioCount || 0,
     warnings: Array.isArray(meta.warnings) ? meta.warnings : [],
     validationErrors: Array.isArray(meta.validationErrors) ? meta.validationErrors : [],
   };
@@ -234,6 +347,7 @@ function buildActiveCaseSnapshot() {
     saved_at: new Date().toISOString(),
     scenario: state.loadedScenario,
     images: serializeImageRegistry(state.loadedImageRegistry),
+    audio: serializeAudioRegistry(state.loadedAudioRegistry),
     meta: serializeLoadedPackageMeta(state.loadedScenarioMeta),
     engine_state: serializeEngineState(state.engine),
     dialogue_history_by_participant: serializeDialogueHistory(),
@@ -324,6 +438,7 @@ function buildActiveCaseRecordFromSnapshot(snapshot, meta) {
     sourceLabel: meta?.sourceLabel || "",
     savedAt: snapshot.saved_at || new Date().toISOString(),
     selectedImageCount: meta?.selectedImageCount || 0,
+    selectedAudioCount: meta?.selectedAudioCount || 0,
     packageStatus,
     gameplayStarted: Boolean(snapshot.engine_state),
   };
@@ -336,6 +451,7 @@ function restoreSnapshotIntoState(snapshot) {
   const meta = snapshot.meta || {};
   state.loadedScenario = snapshot.scenario;
   state.loadedImageRegistry = deserializeImageRegistry(snapshot.images || {});
+  state.loadedAudioRegistry = deserializeAudioRegistry(snapshot.audio || {});
   state.loadedScenarioMeta = {
     sourceLabel: meta.sourceLabel || "Память браузера",
     sourceType: meta.sourceType || meta.packageType || "",
@@ -348,6 +464,9 @@ function restoreSnapshotIntoState(snapshot) {
     selectedImageCount: meta.selectedImageCount || 0,
     matchedImageCount: meta.matchedImageCount || 0,
     unmatchedImageCount: meta.unmatchedImageCount || 0,
+    selectedAudioCount: meta.selectedAudioCount || 0,
+    matchedAudioCount: meta.matchedAudioCount || 0,
+    unmatchedAudioCount: meta.unmatchedAudioCount || 0,
     warnings: Array.isArray(meta.warnings) ? meta.warnings : [],
     validationErrors: Array.isArray(meta.validationErrors) ? meta.validationErrors : [],
   };
@@ -481,6 +600,7 @@ function renderActiveCaseStatus() {
 
   const savedAt = record?.savedAt ? new Date(record.savedAt).toLocaleString("ru-RU") : "неизвестно";
   const imageCount = Number.isFinite(record?.selectedImageCount) ? record.selectedImageCount : state.loadedScenarioMeta?.selectedImageCount || 0;
+  const audioCount = Number.isFinite(record?.selectedAudioCount) ? record.selectedAudioCount : state.loadedScenarioMeta?.selectedAudioCount || 0;
   const packageStatus = state.engine
     ? state.engine.finished
       ? "сохранён с завершённым сценарием"
@@ -497,6 +617,7 @@ function renderActiveCaseStatus() {
     <p><strong>Источник:</strong> ${escapeHtml(getSourceTypeLabel(sourceType))}</p>
     <p><strong>Статус пакета:</strong> ${escapeHtml(packageStatus)}</p>
     <p><strong>Иллюстраций:</strong> ${escapeHtml(String(imageCount))}</p>
+    <p><strong>Аудиофайлов:</strong> ${escapeHtml(String(audioCount))}</p>
     <p><strong>Сохранено:</strong> ${escapeHtml(savedAt)}</p>
     ${statusLine}
     <p class="muted">Активное дело сохраняется локально в браузере. Серверного хранения нет.</p>
@@ -516,9 +637,11 @@ function clearLoadedPackage() {
   if (state.loadedImageRegistry) {
     revokeImageRegistry(state.loadedImageRegistry);
   }
+  stopDialogueAudio();
   state.loadedScenario = null;
   state.loadedScenarioMeta = null;
   state.loadedImageRegistry = null;
+  state.loadedAudioRegistry = null;
   updateLoadedPackageButtons();
 }
 
@@ -589,6 +712,21 @@ function isSupportedImageFile(file) {
   );
 }
 
+function isSupportedAudioFile(file) {
+  if (!file) {
+    return false;
+  }
+  const name = file.name.toLowerCase();
+  return (
+    file.type === "audio/mpeg" ||
+    file.type === "audio/wav" ||
+    file.type === "audio/ogg" ||
+    file.type === "audio/webm" ||
+    file.type === "audio/mp4" ||
+    /\.(mp3|wav|ogg|webm|m4a)$/.test(name)
+  );
+}
+
 function basenameFromPath(value) {
   return String(value || "")
     .split(/[\\/]/)
@@ -649,6 +787,40 @@ function createImageRegistryFromPackage(images = {}) {
   return registry;
 }
 
+async function createAudioRegistryFromFiles(audioFiles) {
+  const registry = createEmptyImageRegistry();
+  const audioEntries = await Promise.all(
+    audioFiles.map(async (file) => ({
+      file,
+      dataUrl: await readFileAsDataUrl(file),
+    }))
+  );
+  for (const entry of audioEntries) {
+    const url = entry.dataUrl;
+    const file = entry.file;
+    const pathKey = normalizeLookupPath(file.name);
+    const basenameKey = basenameFromPath(file.name);
+    registry.byPath.set(pathKey, url);
+    if (!registry.byBasename.has(basenameKey)) {
+      registry.byBasename.set(basenameKey, url);
+    }
+  }
+  return registry;
+}
+
+function createAudioRegistryFromPackage(audio = {}) {
+  const registry = createEmptyImageRegistry();
+  const byPathEntries = audio.by_path || audio.byPath || {};
+  const byBasenameEntries = audio.by_basename || audio.byBasename || {};
+  for (const [path, url] of Object.entries(byPathEntries)) {
+    registry.byPath.set(normalizeLookupPath(path), url);
+  }
+  for (const [basename, url] of Object.entries(byBasenameEntries)) {
+    registry.byBasename.set(normalizeLookupPath(basename), url);
+  }
+  return registry;
+}
+
 function getVisualAssets() {
   return Array.isArray(state.loadedScenario?.visual_assets)
     ? state.loadedScenario.visual_assets.filter((item) => item && typeof item === "object")
@@ -681,6 +853,58 @@ function getVisualAssetForParticipant(participant) {
       asset.target_id === participant.id
   );
   return byTarget || byPlacement || byVisualAssetId || null;
+}
+
+function getDialogueAudioAsset(actionId) {
+  const audioAssets = Array.isArray(state.loadedScenario?.audio_assets)
+    ? state.loadedScenario.audio_assets.filter((item) => item && typeof item === "object")
+    : [];
+  return audioAssets.find((asset) => asset.target_type === "dialogue_action" && asset.target_id === actionId) || null;
+}
+
+function getDialogueAudioUrl(assetOrActionId) {
+  const asset = typeof assetOrActionId === "string" ? getDialogueAudioAsset(assetOrActionId) : assetOrActionId;
+  if (!asset || !asset.file || !state.loadedAudioRegistry) {
+    return null;
+  }
+  const pathKey = normalizeLookupPath(asset.file);
+  const basenameKey = basenameFromPath(asset.file);
+  return state.loadedAudioRegistry.byPath.get(pathKey) || state.loadedAudioRegistry.byBasename.get(basenameKey) || null;
+}
+
+function hasDialogueAudio(actionId) {
+  return Boolean(getDialogueAudioUrl(actionId));
+}
+
+function renderDialogueAudioButton(actionId) {
+  if (!hasDialogueAudio(actionId)) {
+    return "";
+  }
+  const player = state.dialogueAudioPlayer;
+  const isPlaying = Boolean(player && player.currentActionId === actionId && player.isPlaying);
+  return `
+    <div class="dialogue-history-audio">
+      <button
+        type="button"
+        class="dialogue-audio-button"
+        data-dialogue-audio-action-id="${escapeHtml(actionId)}"
+      >
+        ${escapeHtml(isPlaying ? "⏸ Остановить" : "▶ Прослушать")}
+      </button>
+    </div>
+  `;
+}
+
+function renderParticipantVoiceProfile(participant) {
+  if (!participant?.voice_profile || typeof participant.voice_profile !== "object") {
+    return "";
+  }
+  return `
+    <div class="participant-detail-block participant-voice-block">
+      <p class="participant-detail-label">Голос</p>
+      <p>Голосовой профиль задан для будущего озвучивания.</p>
+    </div>
+  `;
 }
 
 function getVisualAssetsForDisplay() {
@@ -794,6 +1018,11 @@ function renderLoadedPackageStatus(statusText, isError = false) {
     source.unmatchedImageCount > 0
       ? `<p><strong>Неиспользовано:</strong> ${escapeHtml(String(source.unmatchedImageCount))}</p>`
       : "",
+    `<p><strong>Аудиофайлов найдено:</strong> ${escapeHtml(String(source.selectedAudioCount || 0))}</p>`,
+    `<p><strong>Совпадений с audio_assets:</strong> ${escapeHtml(String(source.matchedAudioCount || 0))}</p>`,
+    source.unmatchedAudioCount > 0
+      ? `<p><strong>Невостребовано:</strong> ${escapeHtml(String(source.unmatchedAudioCount))}</p>`
+      : "",
     `<p><strong>Сценарий:</strong> ${escapeHtml(source.title || "Без названия")}</p>`,
     Array.isArray(source.warnings) && source.warnings.length
       ? `
@@ -853,6 +1082,21 @@ function getVisualAssetMatchCount(scenario, registry) {
   }).length;
 }
 
+function getAudioAssetMatchCount(scenario, registry) {
+  const assets = Array.isArray(scenario?.audio_assets) ? scenario.audio_assets : [];
+  if (!registry) {
+    return 0;
+  }
+  return assets.filter((asset) => {
+    if (!asset || !asset.file) {
+      return false;
+    }
+    const pathKey = normalizeLookupPath(asset.file);
+    const basenameKey = basenameFromPath(asset.file);
+    return registry.byPath.has(pathKey) || registry.byBasename.has(basenameKey);
+  }).length;
+}
+
 async function loadCasePackageFromZip(zipFile, sourceLabel, operationToken) {
   const formData = new FormData();
   formData.append("package", zipFile, zipFile.name);
@@ -882,6 +1126,7 @@ async function loadCasePackageFromZip(zipFile, sourceLabel, operationToken) {
   clearCurrentRuntimeState();
   state.loadedScenario = data.scenario;
   state.loadedImageRegistry = createImageRegistryFromPackage(data.images);
+  state.loadedAudioRegistry = createAudioRegistryFromPackage(data.audio);
   state.loadedScenarioMeta = {
     sourceLabel,
     sourceType: "zip",
@@ -892,6 +1137,9 @@ async function loadCasePackageFromZip(zipFile, sourceLabel, operationToken) {
     selectedImageCount: packageSummary.image_count || 0,
     matchedImageCount: packageSummary.matched_image_count || 0,
     unmatchedImageCount: packageSummary.unmatched_image_count || 0,
+    selectedAudioCount: packageSummary.audio_count || 0,
+    matchedAudioCount: packageSummary.matched_audio_count || 0,
+    unmatchedAudioCount: packageSummary.unmatched_audio_count || 0,
     warnings,
   };
   state.activeCaseRecord = {
@@ -900,6 +1148,7 @@ async function loadCasePackageFromZip(zipFile, sourceLabel, operationToken) {
     sourceLabel: state.loadedScenarioMeta.sourceLabel,
     savedAt: new Date().toISOString(),
     selectedImageCount: state.loadedScenarioMeta.selectedImageCount,
+    selectedAudioCount: state.loadedScenarioMeta.selectedAudioCount,
     packageStatus: "loaded",
     gameplayStarted: false,
   };
@@ -917,8 +1166,9 @@ async function loadCasePackageFromFiles(files, sourceLabel, operationToken) {
   const zipFiles = fileList.filter(isZipFile);
   const jsonFiles = fileList.filter(isJsonFile);
   const imageFiles = fileList.filter(isSupportedImageFile);
+  const audioFiles = fileList.filter(isSupportedAudioFile);
   const unsupportedFiles = fileList.filter(
-    (file) => !isZipFile(file) && !isJsonFile(file) && !isSupportedImageFile(file)
+    (file) => !isZipFile(file) && !isJsonFile(file) && !isSupportedImageFile(file) && !isSupportedAudioFile(file)
   );
 
   if (zipFiles.length) {
@@ -941,6 +1191,7 @@ async function loadCasePackageFromFiles(files, sourceLabel, operationToken) {
 
   const scenarioFile = jsonFiles[0];
   let imageRegistry = createEmptyImageRegistry();
+  let audioRegistry = createEmptyImageRegistry();
 
   try {
     const raw = await readFileAsText(scenarioFile);
@@ -965,25 +1216,32 @@ async function loadCasePackageFromFiles(files, sourceLabel, operationToken) {
     }
 
     imageRegistry = await createImageRegistryFromFiles(imageFiles);
+    audioRegistry = await createAudioRegistryFromFiles(audioFiles);
     if (operationToken !== undefined && !isActiveCaseAsyncOperationCurrent(operationToken)) {
       revokeImageRegistry(imageRegistry);
+      revokeImageRegistry(audioRegistry);
       return;
     }
     const matchedImageCount = getVisualAssetMatchCount(scenario, imageRegistry);
+    const matchedAudioCount = getAudioAssetMatchCount(scenario, audioRegistry);
     clearLoadedPackage();
     clearCurrentRuntimeState();
     state.loadedScenario = scenario;
     state.loadedImageRegistry = imageRegistry;
+    state.loadedAudioRegistry = audioRegistry;
     state.loadedScenarioMeta = {
       sourceLabel,
-      sourceType: "json_images",
-      packageType: "json_images",
+      sourceType: "json_files",
+      packageType: "json_files",
       fileName: scenarioFile.name,
       sizeBytes: scenarioFile.size,
       title: getScenarioTitle(scenario),
       selectedImageCount: imageFiles.length,
       matchedImageCount,
       unmatchedImageCount: Math.max(0, imageFiles.length - matchedImageCount),
+      selectedAudioCount: audioFiles.length,
+      matchedAudioCount,
+      unmatchedAudioCount: Math.max(0, audioFiles.length - matchedAudioCount),
       warnings: [],
     };
     state.activeCaseRecord = {
@@ -992,6 +1250,7 @@ async function loadCasePackageFromFiles(files, sourceLabel, operationToken) {
       sourceLabel: state.loadedScenarioMeta.sourceLabel,
       savedAt: new Date().toISOString(),
       selectedImageCount: state.loadedScenarioMeta.selectedImageCount,
+      selectedAudioCount: state.loadedScenarioMeta.selectedAudioCount,
       packageStatus: "loaded",
       gameplayStarted: false,
     };
@@ -1004,6 +1263,7 @@ async function loadCasePackageFromFiles(files, sourceLabel, operationToken) {
     void queueActiveCasePersistence();
   } catch (error) {
     revokeImageRegistry(imageRegistry);
+    revokeImageRegistry(audioRegistry);
     throw error;
   }
 }
@@ -1214,13 +1474,14 @@ function renderParticipantDialogue(participant, isActive) {
 
   const historyHtml = history.length
     ? history
-        .map(
-          (item) => `
+          .map(
+            (item) => `
             <article class="dialogue-history-entry">
               <p class="dialogue-label">Вопрос</p>
               <p class="dialogue-question">${escapeHtml(item.question)}</p>
               <p class="dialogue-label">Ответ</p>
               <p class="dialogue-answer">${escapeHtml(item.answer)}</p>
+              ${renderDialogueAudioButton(item.actionId)}
               ${
                 item.notes && item.notes.length
                   ? `
@@ -1326,6 +1587,7 @@ function renderParticipants() {
                 <p class="participant-detail-label">Связь с делом</p>
                 <p>${escapeHtml(participant.relation_to_case)}</p>
               </div>
+              ${renderParticipantVoiceProfile(participant)}
               <div class="participant-detail-block">
                 <p class="participant-detail-label">Публичное описание</p>
                 <p>${escapeHtml(participant.public_description)}</p>
@@ -1528,6 +1790,7 @@ function handleDialogueClick(actionId) {
   if (!action || !isDialogueAvailable(action)) {
     return;
   }
+  stopDialogueAudio();
   state.selectedParticipantId = action.participant_id;
   state.engine.askedQuestions.add(action.id);
   state.engine.completedActions.add(action.id);
@@ -1544,6 +1807,9 @@ function handleDialogueClick(actionId) {
   });
   applyEffects(action.effects, action);
   renderAll();
+  if (state.audioAutoPlayEnabled) {
+    void playDialogueAudioByActionId(action.id, { autoplay: true });
+  }
   if (state.activeCaseRecord) {
     state.activeCaseRecord = {
       ...state.activeCaseRecord,
@@ -1628,6 +1894,9 @@ dom.loadDemoBtn.addEventListener("click", async () => {
       selectedImageCount: 0,
       matchedImageCount: 0,
       unmatchedImageCount: 0,
+      selectedAudioCount: 0,
+      matchedAudioCount: 0,
+      unmatchedAudioCount: 0,
       warnings: [],
     };
     state.activeCaseRecord = {
@@ -1636,6 +1905,7 @@ dom.loadDemoBtn.addEventListener("click", async () => {
       sourceLabel: state.loadedScenarioMeta.sourceLabel,
       savedAt: new Date().toISOString(),
       selectedImageCount: 0,
+      selectedAudioCount: 0,
       packageStatus: "loaded",
       gameplayStarted: false,
     };
@@ -1741,6 +2011,17 @@ if (dom.deleteActiveCaseBtn) {
   });
 }
 
+if (dom.voiceToggleBtn) {
+  dom.voiceToggleBtn.addEventListener("click", () => {
+    state.audioAutoPlayEnabled = !state.audioAutoPlayEnabled;
+    if (!state.audioAutoPlayEnabled) {
+      stopDialogueAudio();
+    }
+    updateVoiceToggleButton();
+    renderAll();
+  });
+}
+
 if (dom.imageViewerModal) {
   dom.imageViewerModal.addEventListener("click", (event) => {
     if (event.target === dom.imageViewerModal || event.target.matches("[data-image-viewer-close]")) {
@@ -1794,6 +2075,26 @@ document.addEventListener("click", (event) => {
   const visualAssetTrigger = targetElement?.closest("[data-visual-asset-id]");
   if (visualAssetTrigger && state.loadedScenario) {
     openImageViewer(visualAssetTrigger.getAttribute("data-visual-asset-id"));
+  }
+
+  const audioTrigger = targetElement?.closest("[data-dialogue-audio-action-id]");
+  if (audioTrigger && state.engine) {
+    const actionId = audioTrigger.getAttribute("data-dialogue-audio-action-id");
+    if (actionId) {
+      const player = ensureDialogueAudioPlayer();
+      const isCurrent = player.currentActionId === actionId && player.isPlaying;
+      if (isCurrent) {
+        stopDialogueAudio();
+        renderAll();
+      } else {
+        void playDialogueAudioByActionId(actionId, { autoplay: false }).then((played) => {
+          if (!played) {
+            return;
+          }
+          renderAll();
+        });
+      }
+    }
   }
 
   const participantId = targetElement?.getAttribute("data-participant-id");

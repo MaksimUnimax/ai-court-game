@@ -196,6 +196,11 @@ button:disabled {
   box-shadow: 0 10px 20px rgba(35, 25, 16, 0.18);
 }
 
+#voice-toggle-btn {
+  background: linear-gradient(180deg, #8a6d2d, #5f481a);
+  box-shadow: 0 10px 20px rgba(95, 72, 26, 0.2);
+}
+
 .status-panel,
 .detail-panel,
 .empty-state,
@@ -386,6 +391,10 @@ button:disabled {
   border: 1px solid rgba(91, 77, 62, 0.14);
 }
 
+.participant-voice-block {
+  border-style: dashed;
+}
+
 .participant-detail-label {
   margin: 0 0 6px;
   color: var(--accent-strong);
@@ -445,6 +454,15 @@ button:disabled {
   padding: 12px;
   background: rgba(255, 255, 255, 0.68);
   border: 1px solid rgba(91, 77, 62, 0.14);
+}
+
+.dialogue-history-audio {
+  margin-top: 10px;
+}
+
+.dialogue-audio-button {
+  margin-top: 0;
+  padding-inline: 14px;
 }
 
 .dialogue-label {

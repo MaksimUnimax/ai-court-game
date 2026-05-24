@@ -30,7 +30,7 @@
               class="case-package-input"
               type="file"
               multiple
-              accept=".zip,application/zip,application/x-zip-compressed,.json,application/json,image/png,image/jpeg,image/webp,image/svg+xml"
+              accept=".zip,application/zip,application/x-zip-compressed,.json,application/json,image/png,image/jpeg,image/webp,image/svg+xml,audio/mpeg,audio/wav,audio/ogg,audio/webm,audio/mp4,.mp3,.wav,.ogg,.webm,.m4a"
             />
             <p class="file-upload-hint">
               Выберите один ZIP-архив или JSON-файл сценария и, при необходимости, изображения дела. Файлы читаются в браузере и не сохраняются на сервер.
@@ -40,6 +40,7 @@
             <button id="load-demo-btn" type="button">Загрузить демо-сценарий</button>
             <button id="start-scenario-btn" type="button">Запустить сценарий</button>
             <button id="delete-active-case-btn" type="button">Удалить активное дело</button>
+            <button id="voice-toggle-btn" type="button">Голос: включён</button>
           </div>
           <div id="active-case-status-panel" class="status-panel empty-state">
             Активное дело не сохранено в памяти браузера.
