@@ -460,6 +460,14 @@ button:disabled {
   margin-top: 10px;
 }
 
+.dialogue-history-warning {
+  color: #8a4a14;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(255, 239, 214, 0.92);
+  border: 1px solid rgba(138, 74, 20, 0.2);
+}
+
 .dialogue-audio-button {
   margin-top: 0;
   padding-inline: 14px;

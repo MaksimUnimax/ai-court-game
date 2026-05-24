@@ -326,11 +326,14 @@ function serializeLoadedPackageMeta(meta) {
     fileName: meta.fileName || "",
     sizeBytes: Number.isFinite(meta.sizeBytes) ? meta.sizeBytes : null,
     title: meta.title || "Без названия",
+    voiceProfileCount: meta.voiceProfileCount || 0,
     selectedImageCount: meta.selectedImageCount || 0,
     matchedImageCount: meta.matchedImageCount || 0,
     unmatchedImageCount: meta.unmatchedImageCount || 0,
+    audioAssetCount: meta.audioAssetCount || 0,
     selectedAudioCount: meta.selectedAudioCount || 0,
     matchedAudioCount: meta.matchedAudioCount || 0,
+    missingAudioCount: meta.missingAudioCount || 0,
     unmatchedAudioCount: meta.unmatchedAudioCount || 0,
     warnings: Array.isArray(meta.warnings) ? meta.warnings : [],
     validationErrors: Array.isArray(meta.validationErrors) ? meta.validationErrors : [],
@@ -437,8 +440,12 @@ function buildActiveCaseRecordFromSnapshot(snapshot, meta) {
     sourceType: meta?.sourceType || meta?.packageType || "",
     sourceLabel: meta?.sourceLabel || "",
     savedAt: snapshot.saved_at || new Date().toISOString(),
+    voiceProfileCount: meta?.voiceProfileCount || 0,
     selectedImageCount: meta?.selectedImageCount || 0,
+    audioAssetCount: meta?.audioAssetCount || 0,
     selectedAudioCount: meta?.selectedAudioCount || 0,
+    matchedAudioCount: meta?.matchedAudioCount || 0,
+    missingAudioCount: meta?.missingAudioCount || 0,
     packageStatus,
     gameplayStarted: Boolean(snapshot.engine_state),
   };
@@ -461,11 +468,14 @@ function restoreSnapshotIntoState(snapshot) {
     fileName: meta.fileName || "",
     sizeBytes: meta.sizeBytes || null,
     title: meta.title || getScenarioTitle(snapshot.scenario),
+    voiceProfileCount: meta.voiceProfileCount || 0,
     selectedImageCount: meta.selectedImageCount || 0,
     matchedImageCount: meta.matchedImageCount || 0,
     unmatchedImageCount: meta.unmatchedImageCount || 0,
+    audioAssetCount: meta.audioAssetCount || 0,
     selectedAudioCount: meta.selectedAudioCount || 0,
     matchedAudioCount: meta.matchedAudioCount || 0,
+    missingAudioCount: meta.missingAudioCount || 0,
     unmatchedAudioCount: meta.unmatchedAudioCount || 0,
     warnings: Array.isArray(meta.warnings) ? meta.warnings : [],
     validationErrors: Array.isArray(meta.validationErrors) ? meta.validationErrors : [],
@@ -570,6 +580,22 @@ function renderActiveCaseStatus() {
 
   const record = state.activeCaseRecord;
   const sourceType = record?.sourceType || state.loadedScenarioMeta?.sourceType || "";
+  const voiceProfileCount = getVoiceProfileCount(state.loadedScenario);
+  const audioAssetCount = Number.isFinite(state.loadedScenarioMeta?.audioAssetCount)
+    ? state.loadedScenarioMeta.audioAssetCount
+    : getAudioAssetCount(state.loadedScenario);
+  const selectedAudioCount = Number.isFinite(record?.selectedAudioCount)
+    ? record.selectedAudioCount
+    : state.loadedScenarioMeta?.selectedAudioCount || 0;
+  const matchedAudioCount = Number.isFinite(state.loadedScenarioMeta?.matchedAudioCount)
+    ? state.loadedScenarioMeta.matchedAudioCount
+    : getAudioAssetMatchCount(state.loadedScenario, state.loadedAudioRegistry);
+  const missingAudioCount = Number.isFinite(state.loadedScenarioMeta?.missingAudioCount)
+    ? state.loadedScenarioMeta.missingAudioCount
+    : Math.max(0, audioAssetCount - matchedAudioCount);
+  const unmatchedAudioCount = Number.isFinite(state.loadedScenarioMeta?.unmatchedAudioCount)
+    ? state.loadedScenarioMeta.unmatchedAudioCount
+    : 0;
   const hasRecord = Boolean(record);
   const gameplayStatus = state.engine
     ? state.engine.finished
@@ -600,7 +626,6 @@ function renderActiveCaseStatus() {
 
   const savedAt = record?.savedAt ? new Date(record.savedAt).toLocaleString("ru-RU") : "неизвестно";
   const imageCount = Number.isFinite(record?.selectedImageCount) ? record.selectedImageCount : state.loadedScenarioMeta?.selectedImageCount || 0;
-  const audioCount = Number.isFinite(record?.selectedAudioCount) ? record.selectedAudioCount : state.loadedScenarioMeta?.selectedAudioCount || 0;
   const packageStatus = state.engine
     ? state.engine.finished
       ? "сохранён с завершённым сценарием"
@@ -617,7 +642,12 @@ function renderActiveCaseStatus() {
     <p><strong>Источник:</strong> ${escapeHtml(getSourceTypeLabel(sourceType))}</p>
     <p><strong>Статус пакета:</strong> ${escapeHtml(packageStatus)}</p>
     <p><strong>Иллюстраций:</strong> ${escapeHtml(String(imageCount))}</p>
-    <p><strong>Аудиофайлов:</strong> ${escapeHtml(String(audioCount))}</p>
+    <p><strong>Голос:</strong> профилей ${escapeHtml(String(voiceProfileCount))}, audio_assets ${escapeHtml(
+      String(audioAssetCount)
+    )}, аудиофайлов ${escapeHtml(String(selectedAudioCount))}, привязанных реплик ${escapeHtml(
+      String(matchedAudioCount)
+    )}, без файлов ${escapeHtml(String(missingAudioCount))}</p>
+    <p><strong>Неиспользовано аудиофайлов:</strong> ${escapeHtml(String(unmatchedAudioCount))}</p>
     <p><strong>Сохранено:</strong> ${escapeHtml(savedAt)}</p>
     ${statusLine}
     <p class="muted">Активное дело сохраняется локально в браузере. Серверного хранения нет.</p>
@@ -877,8 +907,16 @@ function hasDialogueAudio(actionId) {
 }
 
 function renderDialogueAudioButton(actionId) {
-  if (!hasDialogueAudio(actionId)) {
+  const audioState = getDialogueAudioLookup(actionId);
+  if (!audioState.hasReference && !audioState.hasPlayableAudio) {
     return "";
+  }
+  if (!audioState.hasPlayableAudio) {
+    return `
+      <div class="dialogue-history-audio dialogue-history-warning" role="status">
+        Аудиофайл для этой реплики не найден.
+      </div>
+    `;
   }
   const player = state.dialogueAudioPlayer;
   const isPlaying = Boolean(player && player.currentActionId === actionId && player.isPlaying);
@@ -896,13 +934,32 @@ function renderDialogueAudioButton(actionId) {
 }
 
 function renderParticipantVoiceProfile(participant) {
-  if (!participant?.voice_profile || typeof participant.voice_profile !== "object") {
+  const voiceProfile = participant?.voice_profile && typeof participant.voice_profile === "object";
+  const audioStats = getParticipantDialogueAudioStats(participant.id);
+  if (!voiceProfile && !audioStats.playableCount && !audioStats.referencedCount) {
     return "";
   }
+  const lines = [];
+  if (voiceProfile) {
+    lines.push(
+      audioStats.playableCount
+        ? "Профиль голоса задан"
+        : "Голосовой профиль задан, аудио не загружено"
+    );
+  }
+  if (audioStats.playableCount > 0) {
+    lines.push(`Аудио реплик загружено: ${audioStats.playableCount}`);
+  } else if (!voiceProfile && audioStats.referencedCount > 0) {
+    lines.push("Аудио реплик пока нет");
+  }
+  if (audioStats.missingCount > 0) {
+    lines.push(`Для ${audioStats.missingCount} реплик аудиофайлы не найдены`);
+  }
+  const label = voiceProfile ? "Голосовой профиль" : "Аудио реплик";
   return `
     <div class="participant-detail-block participant-voice-block">
-      <p class="participant-detail-label">Голос</p>
-      <p>Голосовой профиль задан для будущего озвучивания.</p>
+      <p class="participant-detail-label">${escapeHtml(label)}</p>
+      ${lines.map((line) => `<p>${escapeHtml(line)}</p>`).join("")}
     </div>
   `;
 }
@@ -998,6 +1055,19 @@ function renderLoadedPackageStatus(statusText, isError = false) {
     return;
   }
 
+  const voiceProfileCount = getVoiceProfileCount(state.loadedScenario);
+  const audioAssetCount = Number.isFinite(source.audioAssetCount)
+    ? source.audioAssetCount
+    : getAudioAssetCount(state.loadedScenario);
+  const selectedAudioCount = Number.isFinite(source.selectedAudioCount) ? source.selectedAudioCount : 0;
+  const matchedAudioCount = Number.isFinite(source.matchedAudioCount)
+    ? source.matchedAudioCount
+    : getAudioAssetMatchCount(state.loadedScenario, state.loadedAudioRegistry);
+  const missingAudioCount = Number.isFinite(source.missingAudioCount)
+    ? source.missingAudioCount
+    : Math.max(0, audioAssetCount - matchedAudioCount);
+  const unmatchedAudioCount = Number.isFinite(source.unmatchedAudioCount) ? source.unmatchedAudioCount : 0;
+
   const parts = [
     `<p><strong>Источник:</strong> ${escapeHtml(source.sourceLabel)}</p>`,
     source.sourceType
@@ -1018,11 +1088,12 @@ function renderLoadedPackageStatus(statusText, isError = false) {
     source.unmatchedImageCount > 0
       ? `<p><strong>Неиспользовано:</strong> ${escapeHtml(String(source.unmatchedImageCount))}</p>`
       : "",
-    `<p><strong>Аудиофайлов найдено:</strong> ${escapeHtml(String(source.selectedAudioCount || 0))}</p>`,
-    `<p><strong>Совпадений с audio_assets:</strong> ${escapeHtml(String(source.matchedAudioCount || 0))}</p>`,
-    source.unmatchedAudioCount > 0
-      ? `<p><strong>Невостребовано:</strong> ${escapeHtml(String(source.unmatchedAudioCount))}</p>`
-      : "",
+    `<p><strong>Голос:</strong> профилей ${escapeHtml(String(voiceProfileCount))}, audio_assets ${escapeHtml(
+      String(audioAssetCount)
+    )}, аудиофайлов ${escapeHtml(String(selectedAudioCount))}, привязанных реплик ${escapeHtml(
+      String(matchedAudioCount)
+    )}, без файлов ${escapeHtml(String(missingAudioCount))}</p>`,
+    `<p><strong>Неиспользовано аудиофайлов:</strong> ${escapeHtml(String(unmatchedAudioCount))}</p>`,
     `<p><strong>Сценарий:</strong> ${escapeHtml(source.title || "Без названия")}</p>`,
     Array.isArray(source.warnings) && source.warnings.length
       ? `
@@ -1097,6 +1168,70 @@ function getAudioAssetMatchCount(scenario, registry) {
   }).length;
 }
 
+function getVoiceProfileCount(scenario) {
+  return Array.isArray(scenario?.participants)
+    ? scenario.participants.filter((participant) => participant && typeof participant.voice_profile === "object").length
+    : 0;
+}
+
+function getAudioAssetCount(scenario) {
+  return Array.isArray(scenario?.audio_assets)
+    ? scenario.audio_assets.filter((item) => item && typeof item === "object").length
+    : 0;
+}
+
+function getMissingAudioAssetCount(scenario, registry) {
+  const assetCount = getAudioAssetCount(scenario);
+  const matchedCount = getAudioAssetMatchCount(scenario, registry);
+  return Math.max(0, assetCount - matchedCount);
+}
+
+function buildAudioPackageWarnings(scenario, registry, loadedAudioCount) {
+  const warnings = [];
+  const audioAssetCount = getAudioAssetCount(scenario);
+  const matchedAudioCount = getAudioAssetMatchCount(scenario, registry);
+  const missingAudioCount = Math.max(0, audioAssetCount - matchedAudioCount);
+  const unreferencedAudioCount = Math.max(0, loadedAudioCount - matchedAudioCount);
+
+  if (audioAssetCount > 0 && loadedAudioCount === 0) {
+    warnings.push("В сценарии есть audio_assets, но соответствующие аудиофайлы не найдены.");
+  }
+  if (loadedAudioCount > 0 && audioAssetCount === 0) {
+    warnings.push("Загружены аудиофайлы, но в сценарии нет привязок audio_assets.");
+  }
+  if (missingAudioCount > 0) {
+    warnings.push(`Не найдено аудио для ${missingAudioCount} реплик.`);
+  }
+  if (unreferencedAudioCount > 0) {
+    warnings.push(`Есть ${unreferencedAudioCount} аудиофайлов без привязки к audio_assets.`);
+  }
+  return warnings;
+}
+
+function getDialogueAudioLookup(actionId) {
+  const asset = getDialogueAudioAsset(actionId);
+  const url = asset ? getDialogueAudioUrl(asset) : null;
+  return {
+    asset,
+    url,
+    hasReference: Boolean(asset),
+    hasPlayableAudio: Boolean(url),
+  };
+}
+
+function getParticipantDialogueAudioStats(participantId) {
+  const actions = Array.isArray(state.scenario?.dialogue_actions)
+    ? state.scenario.dialogue_actions.filter((action) => action && action.participant_id === participantId)
+    : [];
+  const referencedCount = actions.filter((action) => Boolean(getDialogueAudioAsset(action.id))).length;
+  const playableCount = actions.filter((action) => hasDialogueAudio(action.id)).length;
+  return {
+    referencedCount,
+    playableCount,
+    missingCount: Math.max(0, referencedCount - playableCount),
+  };
+}
+
 async function loadCasePackageFromZip(zipFile, sourceLabel, operationToken) {
   const formData = new FormData();
   formData.append("package", zipFile, zipFile.name);
@@ -1134,11 +1269,14 @@ async function loadCasePackageFromZip(zipFile, sourceLabel, operationToken) {
     archiveName: packageSummary.archive_name || zipFile.name,
     archiveSizeBytes: packageSummary.archive_size_bytes || zipFile.size,
     title: packageSummary.scenario_title || getScenarioTitle(data.scenario),
+    voiceProfileCount: getVoiceProfileCount(data.scenario),
     selectedImageCount: packageSummary.image_count || 0,
     matchedImageCount: packageSummary.matched_image_count || 0,
     unmatchedImageCount: packageSummary.unmatched_image_count || 0,
     selectedAudioCount: packageSummary.audio_count || 0,
+    audioAssetCount: packageSummary.audio_asset_count || getAudioAssetCount(data.scenario),
     matchedAudioCount: packageSummary.matched_audio_count || 0,
+    missingAudioCount: packageSummary.missing_audio_count || 0,
     unmatchedAudioCount: packageSummary.unmatched_audio_count || 0,
     warnings,
   };
@@ -1148,7 +1286,10 @@ async function loadCasePackageFromZip(zipFile, sourceLabel, operationToken) {
     sourceLabel: state.loadedScenarioMeta.sourceLabel,
     savedAt: new Date().toISOString(),
     selectedImageCount: state.loadedScenarioMeta.selectedImageCount,
+    audioAssetCount: state.loadedScenarioMeta.audioAssetCount,
     selectedAudioCount: state.loadedScenarioMeta.selectedAudioCount,
+    matchedAudioCount: state.loadedScenarioMeta.matchedAudioCount,
+    missingAudioCount: state.loadedScenarioMeta.missingAudioCount,
     packageStatus: "loaded",
     gameplayStarted: false,
   };
@@ -1224,6 +1365,7 @@ async function loadCasePackageFromFiles(files, sourceLabel, operationToken) {
     }
     const matchedImageCount = getVisualAssetMatchCount(scenario, imageRegistry);
     const matchedAudioCount = getAudioAssetMatchCount(scenario, audioRegistry);
+    const audioAssetCount = getAudioAssetCount(scenario);
     clearLoadedPackage();
     clearCurrentRuntimeState();
     state.loadedScenario = scenario;
@@ -1236,13 +1378,16 @@ async function loadCasePackageFromFiles(files, sourceLabel, operationToken) {
       fileName: scenarioFile.name,
       sizeBytes: scenarioFile.size,
       title: getScenarioTitle(scenario),
+      voiceProfileCount: getVoiceProfileCount(scenario),
       selectedImageCount: imageFiles.length,
       matchedImageCount,
       unmatchedImageCount: Math.max(0, imageFiles.length - matchedImageCount),
       selectedAudioCount: audioFiles.length,
+      audioAssetCount,
       matchedAudioCount,
+      missingAudioCount: Math.max(0, audioAssetCount - matchedAudioCount),
       unmatchedAudioCount: Math.max(0, audioFiles.length - matchedAudioCount),
-      warnings: [],
+      warnings: buildAudioPackageWarnings(scenario, audioRegistry, audioFiles.length),
     };
     state.activeCaseRecord = {
       title: state.loadedScenarioMeta.title,
@@ -1250,7 +1395,10 @@ async function loadCasePackageFromFiles(files, sourceLabel, operationToken) {
       sourceLabel: state.loadedScenarioMeta.sourceLabel,
       savedAt: new Date().toISOString(),
       selectedImageCount: state.loadedScenarioMeta.selectedImageCount,
+      audioAssetCount: state.loadedScenarioMeta.audioAssetCount,
       selectedAudioCount: state.loadedScenarioMeta.selectedAudioCount,
+      matchedAudioCount: state.loadedScenarioMeta.matchedAudioCount,
+      missingAudioCount: state.loadedScenarioMeta.missingAudioCount,
       packageStatus: "loaded",
       gameplayStarted: false,
     };
@@ -1891,11 +2039,14 @@ dom.loadDemoBtn.addEventListener("click", async () => {
       fileName: "demo_case.json",
       sizeBytes: new Blob([JSON.stringify(data)]).size,
       title: getScenarioTitle(data),
+      voiceProfileCount: getVoiceProfileCount(data),
       selectedImageCount: 0,
       matchedImageCount: 0,
       unmatchedImageCount: 0,
       selectedAudioCount: 0,
+      audioAssetCount: getAudioAssetCount(data),
       matchedAudioCount: 0,
+      missingAudioCount: getAudioAssetCount(data),
       unmatchedAudioCount: 0,
       warnings: [],
     };
@@ -1905,7 +2056,10 @@ dom.loadDemoBtn.addEventListener("click", async () => {
       sourceLabel: state.loadedScenarioMeta.sourceLabel,
       savedAt: new Date().toISOString(),
       selectedImageCount: 0,
+      audioAssetCount: state.loadedScenarioMeta.audioAssetCount,
       selectedAudioCount: 0,
+      matchedAudioCount: 0,
+      missingAudioCount: state.loadedScenarioMeta.missingAudioCount,
       packageStatus: "loaded",
       gameplayStarted: false,
     };

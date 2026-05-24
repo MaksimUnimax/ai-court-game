@@ -515,6 +515,7 @@ def import_case_package_from_zip_bytes(zip_bytes, archive_name="case-package.zip
     used_audio_lookup_keys = set()
     missing_audio_assets = []
     audio_assets = normalized_scenario.get("audio_assets", [])
+    audio_asset_count = len(audio_assets)
     for asset in audio_assets:
         file_name = asset.get("file")
         if not file_name:
@@ -571,6 +572,10 @@ def import_case_package_from_zip_bytes(zip_bytes, archive_name="case-package.zip
             + ", ".join(extra_audio[:8])
             + ("…" if len(extra_audio) > 8 else "")
         )
+    if audio_asset_count and not audio_entries:
+        warnings.append("В сценарии есть audio_assets, но соответствующие аудиофайлы не найдены.")
+    if audio_entries and not audio_asset_count:
+        warnings.append("Загружены аудиофайлы, но в сценарии нет привязок audio_assets.")
     if missing_visual_assets:
         warnings.append(
             "Для visual_assets не найдены изображения: "
@@ -594,7 +599,9 @@ def import_case_package_from_zip_bytes(zip_bytes, archive_name="case-package.zip
         "matched_image_count": matched_asset_count,
         "unmatched_image_count": max(0, len(image_entries) - len(used_lookup_keys)),
         "audio_count": len(audio_entries),
+        "audio_asset_count": audio_asset_count,
         "matched_audio_count": matched_audio_count,
+        "missing_audio_count": max(0, audio_asset_count - matched_audio_count),
         "unmatched_audio_count": max(0, len(audio_entries) - len(used_audio_lookup_keys)),
         "warnings": warnings,
     }
