@@ -577,7 +577,7 @@ function resetGamePanelsToEmptyState() {
 function updateLoadedPackageButtons() {
   dom.startScenarioBtn.disabled = !state.loadedScenario || Boolean(state.engine);
   if (dom.restartScenarioBtn) {
-    const shouldShowRestartButton = Boolean(state.loadedScenario && state.engine);
+    const shouldShowRestartButton = Boolean(state.loadedScenario || state.loadedScenarioMeta || state.activeCaseRecord);
     dom.restartScenarioBtn.hidden = !shouldShowRestartButton;
     dom.restartScenarioBtn.disabled = !shouldShowRestartButton;
   }
@@ -1950,7 +1950,7 @@ function startScenarioFromResponse(data) {
 }
 
 async function restartScenarioFromLoadedPackage() {
-  if (!state.loadedScenario || !state.engine) {
+  if (!state.loadedScenario) {
     return;
   }
   const confirmed = window.confirm(
