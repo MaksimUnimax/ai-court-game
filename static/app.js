@@ -27,6 +27,7 @@ const dom = {
   casePackageInput: document.querySelector("#case-package-input"),
   loadDemoBtn: document.querySelector("#load-demo-btn"),
   startScenarioBtn: document.querySelector("#start-scenario-btn"),
+  restartScenarioBtn: document.querySelector("#restart-scenario-btn"),
   deleteActiveCaseBtn: document.querySelector("#delete-active-case-btn"),
   voiceToggleBtn: document.querySelector("#voice-toggle-btn"),
   validationPanel: document.querySelector("#validation-panel"),
@@ -55,6 +56,10 @@ const dom = {
 dom.startScenarioBtn.disabled = true;
 if (dom.deleteActiveCaseBtn) {
   dom.deleteActiveCaseBtn.disabled = true;
+}
+if (dom.restartScenarioBtn) {
+  dom.restartScenarioBtn.hidden = true;
+  dom.restartScenarioBtn.disabled = true;
 }
 if (dom.voiceToggleBtn) {
   dom.voiceToggleBtn.disabled = false;
@@ -571,6 +576,19 @@ function resetGamePanelsToEmptyState() {
 
 function updateLoadedPackageButtons() {
   dom.startScenarioBtn.disabled = !state.loadedScenario || Boolean(state.engine);
+  if (dom.restartScenarioBtn) {
+    const shouldShowRestartButton = Boolean(state.loadedScenario && state.engine);
+    dom.restartScenarioBtn.hidden = !shouldShowRestartButton;
+    dom.restartScenarioBtn.disabled = !shouldShowRestartButton;
+  }
+}
+
+function resetCurrentScenarioState() {
+  closeImageViewer();
+  stopDialogueAudio();
+  state.selectedParticipantId = null;
+  state.selectedEvidenceId = null;
+  state.dialogueHistoryByParticipant = new Map();
 }
 
 function renderActiveCaseStatus() {
@@ -1913,9 +1931,7 @@ function renderAll() {
 function startScenarioFromResponse(data) {
   state.scenario = data.scenario;
   state.engine = createEngine(data.initial_state);
-  state.selectedParticipantId = null;
-  state.selectedEvidenceId = null;
-  state.dialogueHistoryByParticipant = new Map();
+  resetCurrentScenarioState();
   if (state.activeCaseRecord) {
     state.activeCaseRecord = {
       ...state.activeCaseRecord,
@@ -1931,6 +1947,36 @@ function startScenarioFromResponse(data) {
   renderAll();
   renderActiveCaseStatus();
   void queueActiveCasePersistence();
+}
+
+async function restartScenarioFromLoadedPackage() {
+  if (!state.loadedScenario || !state.engine) {
+    return;
+  }
+  const confirmed = window.confirm(
+    "Начать это дело заново? Текущий прогресс прохождения будет сброшен, но загруженные файлы останутся."
+  );
+  if (!confirmed) {
+    return;
+  }
+  const operationToken = beginActiveCaseAsyncOperation();
+  try {
+    const data = await postJson("/api/start-scenario", state.loadedScenario);
+    if (!isActiveCaseAsyncOperationCurrent(operationToken)) {
+      return;
+    }
+    startScenarioFromResponse(data);
+    renderLoadedPackageStatus("Сценарий запущен заново. Прогресс прохождения сброшен.");
+  } catch (error) {
+    if (!isActiveCaseAsyncOperationCurrent(operationToken)) {
+      return;
+    }
+    if (state.loadedScenarioMeta) {
+      renderLoadedPackageStatus(`Не удалось запустить сценарий заново: ${error.message}`, true);
+    } else {
+      renderValidation(`Не удалось запустить сценарий заново: ${error.message}`, true);
+    }
+  }
 }
 
 function handleDialogueClick(actionId) {
@@ -2120,6 +2166,10 @@ dom.startScenarioBtn.addEventListener("click", async () => {
     }
   }
 });
+
+if (dom.restartScenarioBtn) {
+  dom.restartScenarioBtn.addEventListener("click", restartScenarioFromLoadedPackage);
+}
 
 if (dom.deleteActiveCaseBtn) {
   dom.deleteActiveCaseBtn.addEventListener("click", async () => {

@@ -196,6 +196,11 @@ button:disabled {
   box-shadow: 0 10px 20px rgba(35, 25, 16, 0.18);
 }
 
+#restart-scenario-btn {
+  background: linear-gradient(180deg, #507a4a, #2f5530);
+  box-shadow: 0 10px 20px rgba(47, 85, 48, 0.22);
+}
+
 #voice-toggle-btn {
   background: linear-gradient(180deg, #8a6d2d, #5f481a);
   box-shadow: 0 10px 20px rgba(95, 72, 26, 0.2);
