@@ -846,7 +846,8 @@ button:disabled {
 }
 
 .image-viewer-viewport {
-  min-height: min(68vh, 760px);
+  height: min(68vh, 760px);
+  min-height: 0;
   overflow: auto;
   display: flex;
   align-items: center;
@@ -901,7 +902,8 @@ button:disabled {
   }
 
   .image-viewer-viewport {
-    min-height: min(62vh, 640px);
+    height: min(62vh, 640px);
+    min-height: 0;
     padding: 12px;
   }
 }
