@@ -45,6 +45,8 @@ const state = {
     alt: "",
     url: "",
     scale: 1,
+    fitWidth: 0,
+    fitHeight: 0,
     drag: {
       active: false,
       pointerId: null,
@@ -1748,7 +1750,7 @@ function renderImageViewer() {
   dom.imageViewerImage.src = state.imageViewer.url;
   dom.imageViewerImage.alt = state.imageViewer.alt || state.imageViewer.title || "Иллюстрация";
   dom.imageViewerScale.textContent = `${Math.round(state.imageViewer.scale * 100)}%`;
-  updateImageViewerImageSize();
+  scheduleImageViewerBaseMeasurement();
   updateBodyScrollLock();
   updateImageViewerDragStateClass();
 }
@@ -1757,17 +1759,11 @@ function updateImageViewerImageSize() {
   if (!dom.imageViewerViewport || !dom.imageViewerImage || !state.imageViewer.open) {
     return;
   }
-  const naturalWidth = dom.imageViewerImage.naturalWidth || 0;
-  const naturalHeight = dom.imageViewerImage.naturalHeight || 0;
-  if (!naturalWidth || !naturalHeight) {
+  const baseWidth = state.imageViewer.fitWidth || 0;
+  const baseHeight = state.imageViewer.fitHeight || 0;
+  if (!baseWidth || !baseHeight) {
     return;
   }
-
-  const viewportWidth = Math.max(1, dom.imageViewerViewport.clientWidth || naturalWidth);
-  const viewportHeight = Math.max(1, dom.imageViewerViewport.clientHeight || naturalHeight);
-  const fitScale = Math.min(viewportWidth / naturalWidth, viewportHeight / naturalHeight, 1);
-  const baseWidth = naturalWidth * fitScale;
-  const baseHeight = naturalHeight * fitScale;
   const displayScale = clampScale(state.imageViewer.scale);
   const width = Math.max(1, Math.round(baseWidth * displayScale));
   const height = Math.max(1, Math.round(baseHeight * displayScale));
@@ -1783,6 +1779,31 @@ function updateImageViewerImageSize() {
   }
 }
 
+function measureImageViewerBaseSize() {
+  if (!dom.imageViewerImage || !state.imageViewer.open) {
+    return false;
+  }
+  const rect = dom.imageViewerImage.getBoundingClientRect();
+  if (!rect.width || !rect.height) {
+    return false;
+  }
+  state.imageViewer.fitWidth = rect.width;
+  state.imageViewer.fitHeight = rect.height;
+  return true;
+}
+
+function scheduleImageViewerBaseMeasurement() {
+  window.requestAnimationFrame(() => {
+    if (!state.imageViewer.open || !dom.imageViewerImage) {
+      return;
+    }
+    if (!measureImageViewerBaseSize()) {
+      return;
+    }
+    updateImageViewerImageSize();
+  });
+}
+
 function closeImageViewer() {
   stopImageViewerDrag();
   state.imageViewer.open = false;
@@ -1791,6 +1812,8 @@ function closeImageViewer() {
   state.imageViewer.alt = "";
   state.imageViewer.url = "";
   state.imageViewer.scale = 1;
+  state.imageViewer.fitWidth = 0;
+  state.imageViewer.fitHeight = 0;
   if (dom.imageViewerImage) {
     dom.imageViewerImage.removeAttribute("src");
     dom.imageViewerImage.alt = "";
@@ -1818,6 +1841,8 @@ function openImageViewerFromSource(source) {
   state.imageViewer.alt = source.alt || source.title || "Иллюстрация";
   state.imageViewer.url = source.url;
   state.imageViewer.scale = 1;
+  state.imageViewer.fitWidth = 0;
+  state.imageViewer.fitHeight = 0;
   renderImageViewer();
   window.requestAnimationFrame(() => {
     if (dom.imageViewerViewport) {
@@ -3007,7 +3032,7 @@ if (dom.imageViewerCloseBtn) {
 }
 
 if (dom.imageViewerImage) {
-  dom.imageViewerImage.addEventListener("load", updateImageViewerImageSize);
+  dom.imageViewerImage.addEventListener("load", scheduleImageViewerBaseMeasurement);
 }
 
 if (dom.imageViewerZoomInBtn) {
