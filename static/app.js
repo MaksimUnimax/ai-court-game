@@ -197,6 +197,12 @@ function renderTtsControls() {
   if (state.tts.currentAudio) {
     state.tts.currentAudio.volume = state.tts.volume / 100;
   }
+  const hasCurrentAudio = Boolean(state.tts.currentAudio);
+  const pauseButtonLabel = hasCurrentAudio && state.tts.currentAudio.paused ? "Продолжить" : "Пауза";
+  document.querySelectorAll("[data-tts-pause]").forEach((button) => {
+    button.textContent = pauseButtonLabel;
+    button.disabled = !hasCurrentAudio;
+  });
   if (dom.ttsStatusPanel) {
     const toneClass =
       state.tts.statusTone === "error"
@@ -212,6 +218,15 @@ function renderTtsControls() {
   }
 }
 
+function renderTtsActionRow(listenButtonHtml) {
+  return `
+    <div class="tts-action-row">
+      ${listenButtonHtml}
+      <button type="button" class="tts-action-button tts-pause-button" data-tts-pause>Пауза</button>
+    </div>
+  `;
+}
+
 function toggleVoiceSetting() {
   state.tts.enabled = !state.tts.enabled;
   writeVoiceSetting(state.tts.enabled);
@@ -220,6 +235,28 @@ function toggleVoiceSetting() {
     return;
   }
   setTtsStatus("Озвучка готова", "ok");
+}
+
+async function toggleCurrentTtsPause() {
+  if (!state.tts.currentAudio) {
+    return;
+  }
+  if (state.tts.currentAudio.paused) {
+    try {
+      state.tts.isBusy = true;
+      state.tts.statusMessage = "Озвучка воспроизводится";
+      state.tts.statusTone = "ok";
+      await state.tts.currentAudio.play();
+      renderTtsControls();
+    } catch (error) {
+      setTtsStatus(error.message || "Не удалось возобновить озвучку", "error");
+    }
+    return;
+  }
+
+  state.tts.currentAudio.pause();
+  state.tts.isBusy = false;
+  setTtsStatus("Озвучка приостановлена", "muted");
 }
 
 function updateVoiceVolume(value) {
@@ -1558,9 +1595,9 @@ function renderCaseIntro() {
     <p class="muted">${escapeHtml(metadata.case_type)} · ${escapeHtml(metadata.difficulty)}</p>
     <p>${escapeHtml(intro.summary)}</p>
     <p><strong>Брифинг судьи:</strong> ${escapeHtml(intro.judge_briefing)}</p>
-    <div class="tts-action-row">
+    ${renderTtsActionRow(`
       <button type="button" class="tts-action-button" data-tts-case-intro>Прослушать описание дела</button>
-    </div>
+    `)}
   `;
 }
 
@@ -1611,12 +1648,13 @@ function renderParticipantDialogue(participant, isActive) {
               <p class="dialogue-label">Ответ</p>
               <p class="dialogue-answer">${escapeHtml(item.answer)}</p>
               <div class="tts-action-row dialogue-history-audio">
-                <button
-                  type="button"
-                  class="tts-action-button dialogue-audio-button"
-                  data-tts-dialogue-action-id="${escapeHtml(item.actionId)}"
-                >
+                <button type="button" class="tts-action-button dialogue-audio-button" data-tts-dialogue-action-id="${escapeHtml(
+                  item.actionId
+                )}">
                   Прослушать реплику
+                </button>
+                <button type="button" class="tts-action-button dialogue-audio-button tts-pause-button" data-tts-pause>
+                  Пауза
                 </button>
               </div>
               ${
@@ -1783,11 +1821,6 @@ function renderEvidence() {
           <button type="button" data-evidence-id="${escapeHtml(evidence.id)}">
             ${opened ? "Пересмотреть доказательство" : "Открыть доказательство"}
           </button>
-          <div class="tts-action-row">
-            <button type="button" class="tts-action-button" data-tts-evidence-id="${escapeHtml(evidence.id)}">
-              Прослушать доказательство
-            </button>
-          </div>
         </div>
       `;
     })
@@ -1806,11 +1839,11 @@ function renderEvidence() {
     <p>${escapeHtml(selectedEvidence.inspection_text)}</p>
     <p><strong>Что оно доказывает:</strong> ${escapeHtml(selectedEvidence.proves)}</p>
     <p><strong>Ключевое доказательство:</strong> ${selectedEvidence.key_evidence ? "да" : "нет"}</p>
-    <div class="tts-action-row">
+    ${renderTtsActionRow(`
       <button type="button" class="tts-action-button" data-tts-evidence-id="${escapeHtml(selectedEvidence.id)}">
         Прослушать описание доказательства
       </button>
-    </div>
+    `)}
   `;
 }
 
@@ -1870,11 +1903,11 @@ function renderVerdicts() {
           ${
             chosen
               ? `
-                <div class="tts-action-row">
+                ${renderTtsActionRow(`
                   <button type="button" class="tts-action-button" data-tts-verdict-id="${escapeHtml(verdict.id)}">
                     Прослушать вердикт
                   </button>
-                </div>
+                `)}
               `
               : ""
           }
@@ -1902,9 +1935,9 @@ function renderFinalExplanation() {
     <ul class="inline-list">
       ${solution.key_points.map((point) => `<li>${escapeHtml(point)}</li>`).join("")}
     </ul>
-    <div class="tts-action-row">
+    ${renderTtsActionRow(`
       <button type="button" class="tts-action-button" data-tts-final-explanation>Прослушать объяснение</button>
-    </div>
+    `)}
   `;
 }
 
@@ -2271,6 +2304,11 @@ document.addEventListener("click", (event) => {
   const visualAssetTrigger = targetElement?.closest("[data-visual-asset-id]");
   if (visualAssetTrigger && state.loadedScenario) {
     openImageViewer(visualAssetTrigger.getAttribute("data-visual-asset-id"));
+  }
+
+  if (targetElement?.closest("[data-tts-pause]")) {
+    void toggleCurrentTtsPause();
+    return;
   }
 
   if (targetElement?.closest("[data-tts-case-intro]") && state.scenario && state.engine) {
