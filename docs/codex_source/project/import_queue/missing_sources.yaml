@@ -1,0 +1,8 @@
+version: 0.1
+missing_sources:
+  - id: future_scenario_playtest_feedback
+    status: pending_future_input
+    reason: User feedback from first full scenario playtest has not happened yet.
+  - id: future_production_tts_license_decision
+    status: pending_future_decision
+    reason: Silero CE licensing is non-commercial; production/commercial TTS choice is unresolved.

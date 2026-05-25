@@ -3,4 +3,10 @@ files:
   - path: docs/codex_source/module_map/module_map.md
     mode: append_only
     status: initial
-
+last_append_id: MM-2026-05-25-001
+status: current_baseline
+entries:
+  - id: MM-2026-05-25-001
+    path: docs/codex_source/module_map/module_map.md
+    status: current_baseline
+    topic: module_ownership_after_scenario_library_tts_viewer

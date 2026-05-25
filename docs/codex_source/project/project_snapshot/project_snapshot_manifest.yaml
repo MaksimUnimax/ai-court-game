@@ -1,0 +1,6 @@
+version: 0.1
+snapshots:
+  - id: SNAPSHOT-2026-05-25-001
+    path: docs/codex_source/project/project_snapshot/PROJECT_SNAPSHOT.md
+    status: current
+    topic: scenario_generation_foundation

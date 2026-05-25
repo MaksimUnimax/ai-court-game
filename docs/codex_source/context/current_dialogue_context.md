@@ -229,3 +229,46 @@ LLM должна учитывать, что игрок-судья сидит в 
 В черновом MVP допустима распаковка ZIP на сервере в памяти без сохранения файлов на диск.
 
 Текущую загрузку JSON + изображений можно оставить как fallback, но ZIP должен стать удобным основным вариантом.
+
+## CTX-2026-05-25-009 — Текущий baseline перед генерацией полноценных сценариев
+
+Источник: текущий рабочий диалог и подтверждённые Codex reports 2026-05-25.
+
+Проект перешёл к этапу генерации первых полноценных сценариев как изолированных серий детективного судебного сериала. Каждая серия должна быть самостоятельной: без общего сюжета между сериями, со своим стилем рисовки, повествованием, антуражем и контекстом.
+
+Сценарии должны генерироваться по `docs/codex_source/prompts/scenario_creation_canon.md`. Для каждого сценария нужны:
+- полный JSON-сценарий;
+- отдельный prompt для `case_cover`;
+- отдельные prompts для `participant_portrait`;
+- отдельные prompts для `case_illustration` assets.
+
+Визуальные asset-ы теперь являются строгими UI-категориями:
+- `case_cover` отображается только в блоке обложки дела;
+- `participant_portrait` отображается только в карточке участника;
+- `case_illustration` отображается только в секции “Иллюстрации дела”.
+
+Обложка дела обязательна для будущих полноценных сценариев и должна использовать canonical ratio `695 / 616`. Портреты участников не должны попадать в “Иллюстрации дела”. Обложка не должна попадать в “Иллюстрации дела”. “Иллюстрации дела” должны содержать только сцены, места, предметы, доказательства и визуальные дедуктивные изображения.
+
+Понравившиеся сценарии теперь можно сохранять в portable scenario library. Future generated scenarios must be save/load/export/import friendly.
+
+Текущий TTS boundary:
+- не использовать `audio_assets`;
+- не использовать uploaded audio;
+- Silero TTS читает текст сценария;
+- сценарные тексты должны быть пригодны для озвучки.
+
+Следующий рабочий шаг после этого docs update: сгенерировать первый полноценный сценарий по канону и отдельно prompts для иллюстраций.
+
+## CTX-2026-05-25-010 — Доказанные product foundation runs
+
+Источник: Codex reports в текущем диалоге.
+
+Ключевые подтверждённые runs:
+- `AI_COURT_GAME_CREATE_SCENARIO_CREATION_CANON_20260525_02`: создан `docs/codex_source/prompts/scenario_creation_canon.md`.
+- `AI_COURT_GAME_PORTABLE_SCENARIO_LIBRARY_SQLITE_20260525_01`: добавлена portable SQLite scenario library.
+- `AI_COURT_GAME_CASE_COVER_REPLACE_INFO_BLOCK_20260525_01`: добавлена обложка дела, измерен ratio `695 / 616`.
+- `AI_COURT_GAME_FILTER_CASE_ILLUSTRATIONS_ASSETS_20260525_01`: разделены cover/portraits/case illustrations.
+- `AI_COURT_GAME_IMAGE_VIEWER_DRAG_PAN_20260525_01`: добавлен drag-to-pan в image viewer.
+- `AI_COURT_GAME_IMAGE_VIEWER_WHEEL_ZOOM_FIXED_BASE_20260525_01`: исправлен wheel zoom direction reversal через invariant base dimensions.
+
+Эти блоки считаются текущим baseline. Их не нужно повторять или переоткрывать без свежего proof о поломке.

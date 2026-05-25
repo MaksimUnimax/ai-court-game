@@ -150,3 +150,46 @@ STATUS: draft_1
 Ожидаемый результат:
 
 Реализация может строить разные flow дел из scenario data вместо hardcoded dialogue order.
+
+## Roadmap block R007 — Scenario generation and scenario-quality iteration
+
+Status: active_next
+
+Goal:
+Generate and test the first full isolated AI Court Game detective-case episodes using the current scenario canon and live product baseline.
+
+Current foundation:
+- data-driven scenario engine exists;
+- JSON/ZIP scenario loading exists;
+- visual assets exist;
+- case cover exists with ratio `695 / 616`;
+- visual assets are separated into `case_cover`, `participant_portrait`, and `case_illustration`;
+- portable SQLite scenario library exists;
+- Silero text TTS exists;
+- image viewer supports zoom, drag-to-pan and fixed wheel zoom.
+
+Next scenario-generation block:
+1. Generate one full isolated detective-case episode.
+2. Produce scenario JSON.
+3. Produce illustration prompts:
+   - `case_cover` prompt with ratio `695 / 616`;
+   - participant portrait prompts;
+   - case illustration prompts only for scenes, places, objects, evidence and visual deduction.
+4. Load/test the scenario in live UI.
+5. Save a liked version to scenario library.
+6. Convert user feedback into updates to `scenario_creation_canon.md`.
+7. Repeat until scenario quality is strong.
+
+Not next:
+- not uploaded audio;
+- not `audio_assets`;
+- not another TTS provider;
+- not large UI refactor;
+- not database redesign unless the existing SQLite library fails;
+- not hardcoded scenario-specific application code;
+- not OpenAI/API generation.
+
+Success criteria:
+- a scenario can be loaded, played, heard, examined visually, saved to library, exported, imported and replayed;
+- player can reach the correct verdict through dialogue, evidence, visual deduction and final explanation;
+- weaknesses discovered during playtesting become explicit canon updates.

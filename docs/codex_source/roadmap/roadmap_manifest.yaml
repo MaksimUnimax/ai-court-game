@@ -2,5 +2,10 @@ version: 0.3
 project: ai-court-game
 file: docs/codex_source/roadmap/roadmap.md
 append_only: true
-last_append_id: R006
-status: scenario_graph_engine_design_added
+last_append_id: R007
+status: active_next
+entries:
+  - id: R007
+    path: docs/codex_source/roadmap/roadmap.md
+    status: active_next
+    topic: scenario_generation_and_quality_iteration
