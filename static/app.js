@@ -45,6 +45,14 @@ const state = {
     alt: "",
     url: "",
     scale: 1,
+    drag: {
+      active: false,
+      pointerId: null,
+      startX: 0,
+      startY: 0,
+      startScrollLeft: 0,
+      startScrollTop: 0,
+    },
   },
 };
 
@@ -1628,6 +1636,100 @@ function updateBodyScrollLock() {
   document.body.classList.toggle("modal-open", state.imageViewer.open);
 }
 
+function updateImageViewerDragStateClass() {
+  const isDragging = Boolean(state.imageViewer.drag.active);
+  document.body.classList.toggle("image-viewer-dragging", isDragging);
+  if (dom.imageViewerViewport) {
+    dom.imageViewerViewport.classList.toggle("is-dragging", isDragging);
+  }
+}
+
+function stopImageViewerDrag() {
+  const drag = state.imageViewer.drag;
+  const viewport = dom.imageViewerViewport;
+  if (viewport && drag.active && drag.pointerId !== null && typeof viewport.releasePointerCapture === "function") {
+    try {
+      if (viewport.hasPointerCapture?.(drag.pointerId)) {
+        viewport.releasePointerCapture(drag.pointerId);
+      }
+    } catch {
+      // Ignore release errors when the pointer capture is already gone.
+    }
+  }
+  drag.active = false;
+  drag.pointerId = null;
+  drag.startX = 0;
+  drag.startY = 0;
+  drag.startScrollLeft = 0;
+  drag.startScrollTop = 0;
+  updateImageViewerDragStateClass();
+}
+
+function isImageViewerScrollable() {
+  const viewport = dom.imageViewerViewport;
+  if (!viewport) {
+    return false;
+  }
+  return (
+    state.imageViewer.scale > 1 ||
+    viewport.scrollWidth > viewport.clientWidth ||
+    viewport.scrollHeight > viewport.clientHeight
+  );
+}
+
+function beginImageViewerDrag(event) {
+  const viewport = dom.imageViewerViewport;
+  if (!viewport || !state.imageViewer.open || !state.imageViewer.url) {
+    return;
+  }
+  if (event.button !== 0 || event.pointerType === "mouse" && event.buttons !== 1) {
+    return;
+  }
+  if (!isImageViewerScrollable()) {
+    return;
+  }
+  event.preventDefault();
+  stopImageViewerDrag();
+  state.imageViewer.drag.active = true;
+  state.imageViewer.drag.pointerId = event.pointerId;
+  state.imageViewer.drag.startX = event.clientX;
+  state.imageViewer.drag.startY = event.clientY;
+  state.imageViewer.drag.startScrollLeft = viewport.scrollLeft;
+  state.imageViewer.drag.startScrollTop = viewport.scrollTop;
+  if (typeof viewport.setPointerCapture === "function") {
+    try {
+      viewport.setPointerCapture(event.pointerId);
+    } catch {
+      // Ignore capture failures and fall back to pointer events on the viewport.
+    }
+  }
+  updateImageViewerDragStateClass();
+}
+
+function updateImageViewerDrag(event) {
+  const viewport = dom.imageViewerViewport;
+  const drag = state.imageViewer.drag;
+  if (!viewport || !drag.active || drag.pointerId !== event.pointerId) {
+    return;
+  }
+  event.preventDefault();
+  const deltaX = event.clientX - drag.startX;
+  const deltaY = event.clientY - drag.startY;
+  viewport.scrollLeft = drag.startScrollLeft - deltaX;
+  viewport.scrollTop = drag.startScrollTop - deltaY;
+}
+
+function endImageViewerDrag(event) {
+  const drag = state.imageViewer.drag;
+  if (!drag.active) {
+    return;
+  }
+  if (event && drag.pointerId !== null && event.pointerId !== drag.pointerId) {
+    return;
+  }
+  stopImageViewerDrag();
+}
+
 function renderImageViewer() {
   if (!dom.imageViewerModal) {
     return;
@@ -1648,9 +1750,11 @@ function renderImageViewer() {
   dom.imageViewerImage.style.transform = `scale(${state.imageViewer.scale})`;
   dom.imageViewerScale.textContent = `${Math.round(state.imageViewer.scale * 100)}%`;
   updateBodyScrollLock();
+  updateImageViewerDragStateClass();
 }
 
 function closeImageViewer() {
+  stopImageViewerDrag();
   state.imageViewer.open = false;
   state.imageViewer.assetId = null;
   state.imageViewer.title = "";
@@ -1662,6 +1766,10 @@ function closeImageViewer() {
     dom.imageViewerImage.alt = "";
     dom.imageViewerImage.style.transform = "scale(1)";
   }
+  if (dom.imageViewerViewport) {
+    dom.imageViewerViewport.scrollLeft = 0;
+    dom.imageViewerViewport.scrollTop = 0;
+  }
   renderImageViewer();
 }
 
@@ -1669,6 +1777,7 @@ function openImageViewerFromSource(source) {
   if (!source || !source.url) {
     return;
   }
+  stopImageViewerDrag();
   state.imageViewer.open = true;
   state.imageViewer.assetId = source.assetId || null;
   state.imageViewer.title = source.title || source.alt || "Иллюстрация";
@@ -1676,6 +1785,12 @@ function openImageViewerFromSource(source) {
   state.imageViewer.url = source.url;
   state.imageViewer.scale = 1;
   renderImageViewer();
+  window.requestAnimationFrame(() => {
+    if (dom.imageViewerViewport) {
+      dom.imageViewerViewport.scrollLeft = 0;
+      dom.imageViewerViewport.scrollTop = 0;
+    }
+  });
   window.requestAnimationFrame(() => {
     if (dom.imageViewerCloseBtn) {
       dom.imageViewerCloseBtn.focus({ preventScroll: true });
@@ -2881,6 +2996,11 @@ if (dom.imageViewerViewport) {
     },
     { passive: false }
   );
+  dom.imageViewerViewport.addEventListener("pointerdown", beginImageViewerDrag);
+  dom.imageViewerViewport.addEventListener("pointermove", updateImageViewerDrag);
+  dom.imageViewerViewport.addEventListener("pointerup", endImageViewerDrag);
+  dom.imageViewerViewport.addEventListener("pointercancel", endImageViewerDrag);
+  dom.imageViewerViewport.addEventListener("lostpointercapture", endImageViewerDrag);
 }
 
 document.addEventListener("keydown", (event) => {
