@@ -173,6 +173,14 @@ h1 {
   font-size: 0.92rem;
 }
 
+.loader-panel.is-drop-target {
+  outline: 2px dashed rgba(123, 47, 38, 0.34);
+  outline-offset: 4px;
+  background:
+    linear-gradient(180deg, rgba(255, 250, 239, 0.98), rgba(245, 233, 204, 0.92)),
+    var(--surface);
+}
+
 .cover-section-title {
   margin: 18px 0 0;
   color: var(--accent-strong);
@@ -393,6 +401,47 @@ button:disabled {
   display: grid;
   gap: 8px;
   padding-top: 12px;
+}
+
+.load-status-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.load-status-summary {
+  display: grid;
+  gap: 8px;
+}
+
+.load-status-message {
+  margin: 0;
+  color: var(--accent-strong);
+  font-weight: 700;
+}
+
+.load-status-files {
+  margin: 0;
+  color: var(--ink-soft);
+}
+
+.load-progress-track {
+  position: relative;
+  height: 12px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(91, 77, 62, 0.14);
+  border: 1px solid rgba(91, 77, 62, 0.16);
+}
+
+.load-progress-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent), #9d5f26);
+  transition: width 0.18s ease;
+}
+
+.load-progress-fill.is-loading {
+  background: linear-gradient(90deg, #355f8c, #6c92c2);
 }
 
 .status-error {

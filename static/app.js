@@ -15,6 +15,13 @@ const state = {
   loadedScenario: null,
   loadedScenarioMeta: null,
   loadedImageRegistry: null,
+  packageLoad: {
+    stagedFiles: [],
+    isLoading: false,
+    progress: 0,
+    statusMessage: "Файлы не выбраны.",
+    statusTone: "muted",
+  },
   activeCaseRecord: null,
   activeCaseNotice: "",
   activeCaseError: "",
@@ -60,8 +67,9 @@ const state = {
 };
 
 const dom = {
+  loaderPanel: document.querySelector("#loader-panel"),
   casePackageInput: document.querySelector("#case-package-input"),
-  loadDemoBtn: document.querySelector("#load-demo-btn"),
+  loadCaseBtn: document.querySelector("#load-case-btn"),
   startScenarioBtn: document.querySelector("#start-scenario-btn"),
   restartScenarioBtn: document.querySelector("#restart-scenario-btn"),
   deleteActiveCaseBtn: document.querySelector("#delete-active-case-btn"),
@@ -882,11 +890,21 @@ function resetGamePanelsToEmptyState() {
 }
 
 function updateLoadedPackageButtons() {
-  dom.startScenarioBtn.disabled = !state.loadedScenario || Boolean(state.engine);
+  const isLoading = Boolean(state.packageLoad.isLoading);
+  dom.startScenarioBtn.disabled = isLoading || !state.loadedScenario || Boolean(state.engine);
+  if (dom.loadCaseBtn) {
+    dom.loadCaseBtn.disabled = isLoading || !state.packageLoad.stagedFiles.length;
+  }
+  if (dom.casePackageInput) {
+    dom.casePackageInput.disabled = isLoading;
+  }
   if (dom.restartScenarioBtn) {
     const shouldShowRestartButton = Boolean(state.loadedScenario || state.loadedScenarioMeta || state.activeCaseRecord);
     dom.restartScenarioBtn.hidden = !shouldShowRestartButton;
-    dom.restartScenarioBtn.disabled = !shouldShowRestartButton;
+    dom.restartScenarioBtn.disabled = isLoading || !shouldShowRestartButton;
+  }
+  if (dom.deleteActiveCaseBtn) {
+    dom.deleteActiveCaseBtn.disabled = isLoading || !(state.loadedScenario || state.activeCaseRecord || state.activeCaseError);
   }
 }
 
@@ -1251,11 +1269,18 @@ async function importScenarioLibraryZip(file) {
 }
 
 function renderValidation(message, isError = false) {
-  dom.validationPanel.className = `status-panel package-details-panel ${isError ? "status-error" : "status-ok"}`;
-  if (typeof dom.validationPanel.open === "boolean") {
-    dom.validationPanel.open = false;
-  }
-  dom.validationPanel.innerHTML = `<summary>${escapeHtml(message)}</summary>`;
+  state.packageLoad.statusMessage = message;
+  state.packageLoad.statusTone = isError
+    ? "error"
+    : state.packageLoad.isLoading
+      ? "pending"
+      : state.loadedScenarioMeta
+        ? "ok"
+        : state.packageLoad.stagedFiles.length
+          ? "pending"
+          : "muted";
+  state.packageLoad.progress = isError ? 100 : clampLoadProgress(state.packageLoad.progress || (state.packageLoad.stagedFiles.length ? 16 : 0));
+  renderLoadStatusPanel();
 }
 
 function clearLoadedPackage() {
@@ -1276,6 +1301,16 @@ function clearActiveCaseState() {
   state.activeCaseError = "";
   clearLoadedPackage();
   createEmptyGameState();
+  state.packageLoad.stagedFiles = [];
+  state.packageLoad.isLoading = false;
+  state.packageLoad.progress = 0;
+  state.packageLoad.statusTone = "muted";
+  state.packageLoad.statusMessage = "Файлы не выбраны.";
+  if (dom.casePackageInput) {
+    dom.casePackageInput.value = "";
+  }
+  updateLoadedPackageButtons();
+  renderLoadStatusPanel();
   resetGamePanelsToEmptyState();
   renderActiveCaseStatus();
   renderValidation("Сценарий пока не загружен.");
@@ -1314,6 +1349,178 @@ function escapeStatusHtml(value) {
     .split("<br>")
     .map((part) => escapeHtml(part))
     .join("<br>");
+}
+
+function clampLoadProgress(value) {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function describeStagedCaseFiles(files) {
+  const stagedFiles = Array.from(files || []);
+  if (!stagedFiles.length) {
+    return "Файлы не выбраны.";
+  }
+  const names = stagedFiles.map((file) => file.name).filter(Boolean);
+  if (!names.length) {
+    return `${stagedFiles.length} файл(ов) выбрано.`;
+  }
+  if (names.length === 1) {
+    return `Выбран файл: ${names[0]}.`;
+  }
+  const preview = names.slice(0, 3).join(", ");
+  const suffix = names.length > 3 ? ` и ещё ${names.length - 3}` : "";
+  return `Выбрано файлов: ${names.length}. ${preview}${suffix}.`;
+}
+
+function getLoadStatusToneClass(tone) {
+  if (tone === "error") {
+    return "status-error";
+  }
+  if (tone === "ok") {
+    return "status-ok";
+  }
+  if (tone === "pending") {
+    return "status-pending";
+  }
+  return "";
+}
+
+function buildLoadedPackageDetailsHtml(source, statusText, isError = false) {
+  if (!source) {
+    return "";
+  }
+
+  const parts = [
+    `<p><strong>Источник:</strong> ${escapeHtml(source.sourceLabel)}</p>`,
+    source.sourceType
+      ? `<p><strong>Тип источника:</strong> ${escapeHtml(getSourceTypeLabel(source.sourceType))}</p>`
+      : "",
+    source.packageType === "zip" && source.archiveName
+      ? `<p><strong>ZIP-архив:</strong> ${escapeHtml(source.archiveName)}</p>`
+      : source.fileName
+        ? `<p><strong>JSON-файл:</strong> ${escapeHtml(source.fileName)}</p>`
+        : "",
+    source.packageType === "zip" && Number.isFinite(source.archiveSizeBytes)
+      ? `<p><strong>Размер архива:</strong> ${escapeHtml(formatBytes(source.archiveSizeBytes))}</p>`
+      : Number.isFinite(source.sizeBytes)
+        ? `<p><strong>Размер:</strong> ${escapeHtml(formatBytes(source.sizeBytes))}</p>`
+        : "",
+    `<p><strong>Изображений найдено:</strong> ${escapeHtml(String(source.selectedImageCount || 0))}</p>`,
+    `<p><strong>Совпадений с visual_assets:</strong> ${escapeHtml(String(source.matchedImageCount || 0))}</p>`,
+    source.unmatchedImageCount > 0
+      ? `<p><strong>Неиспользовано:</strong> ${escapeHtml(String(source.unmatchedImageCount))}</p>`
+      : "",
+    `<p><strong>Сценарий:</strong> ${escapeHtml(source.title || "Без названия")}</p>`,
+    Array.isArray(source.warnings) && source.warnings.length
+      ? `
+        <div class="status-warnings">
+          <p><strong>Предупреждения:</strong></p>
+          <ul>
+            ${source.warnings.map((warning) => `<li>${escapeHtml(warning)}</li>`).join("")}
+          </ul>
+        </div>
+      `
+      : "",
+    Array.isArray(source.validationErrors) && source.validationErrors.length
+      ? `
+        <div class="status-warnings">
+          <p><strong>Ошибки проверки:</strong></p>
+          <ul>
+            ${source.validationErrors.map((error) => `<li>${escapeHtml(error)}</li>`).join("")}
+          </ul>
+        </div>
+      `
+      : "",
+    statusText ? `<p><strong>Статус:</strong> ${escapeStatusHtml(statusText)}</p>` : "",
+  ].filter(Boolean);
+
+  return parts.join("");
+}
+
+function renderLoadStatusPanel(detailsHtml = "") {
+  if (!dom.validationPanel) {
+    return;
+  }
+  const toneClass = getLoadStatusToneClass(state.packageLoad.statusTone);
+  const hasStagedFiles = state.packageLoad.stagedFiles.length > 0;
+  const stagedSummary = hasStagedFiles
+    ? describeStagedCaseFiles(state.packageLoad.stagedFiles)
+    : state.loadedScenarioMeta
+      ? `Загружен сценарий: ${state.loadedScenarioMeta.title}.`
+      : "Файлы не выбраны.";
+  const progress = clampLoadProgress(state.packageLoad.progress);
+  const isLoading = Boolean(state.packageLoad.isLoading);
+  const statusMessage = state.packageLoad.statusMessage || "Файлы не выбраны.";
+
+  dom.validationPanel.className = `status-panel package-details-panel load-status-panel ${toneClass}`.trim();
+  dom.validationPanel.innerHTML = `
+    <div class="load-status-summary">
+      <p class="load-status-message">${escapeStatusHtml(statusMessage)}</p>
+      <p class="load-status-files">${escapeHtml(stagedSummary)}</p>
+      <div class="load-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progress}">
+        <div class="load-progress-fill${isLoading ? " is-loading" : ""}" style="width: ${progress}%"></div>
+      </div>
+    </div>
+    ${
+      detailsHtml
+        ? `
+          <div class="package-details-body">
+            ${detailsHtml}
+          </div>
+        `
+        : ""
+    }
+  `;
+}
+
+function setPackageLoadState(patch = {}) {
+  state.packageLoad = {
+    ...state.packageLoad,
+    ...patch,
+  };
+  renderLoadStatusPanel();
+  updateLoadedPackageButtons();
+}
+
+function stageCaseFiles(files, sourceLabel) {
+  if (state.packageLoad.isLoading) {
+    return;
+  }
+  const stagedFiles = Array.from(files || []);
+  state.packageLoad.stagedFiles = stagedFiles;
+  state.packageLoad.isLoading = false;
+  state.packageLoad.progress = stagedFiles.length ? 16 : 0;
+  state.packageLoad.statusTone = stagedFiles.length ? "pending" : "muted";
+  state.packageLoad.statusMessage = stagedFiles.length
+    ? `${sourceLabel || "Выбраны файлы"}: ${describeStagedCaseFiles(stagedFiles)}`
+    : "Файлы не выбраны.";
+  renderLoadStatusPanel();
+  updateLoadedPackageButtons();
+}
+
+function resetCaseLoadAfterSuccess(message) {
+  state.packageLoad.stagedFiles = [];
+  state.packageLoad.isLoading = false;
+  state.packageLoad.progress = 100;
+  state.packageLoad.statusTone = "ok";
+  state.packageLoad.statusMessage = message;
+  if (dom.casePackageInput) {
+    dom.casePackageInput.value = "";
+  }
+  renderLoadStatusPanel();
+  updateLoadedPackageButtons();
+}
+
+function setCaseLoadError(message) {
+  state.packageLoad.isLoading = false;
+  state.packageLoad.progress = 100;
+  state.packageLoad.statusTone = "error";
+  state.packageLoad.statusMessage = message;
+  renderLoadStatusPanel();
+  updateLoadedPackageButtons();
 }
 
 function isJsonFile(file) {
@@ -1951,60 +2158,12 @@ function renderLoadedPackageStatus(statusText, isError = false) {
     return;
   }
 
-  const parts = [
-    `<p><strong>Источник:</strong> ${escapeHtml(source.sourceLabel)}</p>`,
-    source.sourceType
-      ? `<p><strong>Тип источника:</strong> ${escapeHtml(getSourceTypeLabel(source.sourceType))}</p>`
-      : "",
-    source.packageType === "zip" && source.archiveName
-      ? `<p><strong>ZIP-архив:</strong> ${escapeHtml(source.archiveName)}</p>`
-      : source.fileName
-        ? `<p><strong>JSON-файл:</strong> ${escapeHtml(source.fileName)}</p>`
-        : "",
-    source.packageType === "zip" && Number.isFinite(source.archiveSizeBytes)
-      ? `<p><strong>Размер архива:</strong> ${escapeHtml(formatBytes(source.archiveSizeBytes))}</p>`
-      : Number.isFinite(source.sizeBytes)
-        ? `<p><strong>Размер:</strong> ${escapeHtml(formatBytes(source.sizeBytes))}</p>`
-        : "",
-    `<p><strong>Изображений найдено:</strong> ${escapeHtml(String(source.selectedImageCount || 0))}</p>`,
-    `<p><strong>Совпадений с visual_assets:</strong> ${escapeHtml(String(source.matchedImageCount || 0))}</p>`,
-    source.unmatchedImageCount > 0
-      ? `<p><strong>Неиспользовано:</strong> ${escapeHtml(String(source.unmatchedImageCount))}</p>`
-      : "",
-    `<p><strong>Сценарий:</strong> ${escapeHtml(source.title || "Без названия")}</p>`,
-    Array.isArray(source.warnings) && source.warnings.length
-      ? `
-        <div class="status-warnings">
-          <p><strong>Предупреждения:</strong></p>
-          <ul>
-            ${source.warnings.map((warning) => `<li>${escapeHtml(warning)}</li>`).join("")}
-          </ul>
-        </div>
-      `
-      : "",
-    Array.isArray(source.validationErrors) && source.validationErrors.length
-      ? `
-        <div class="status-warnings">
-          <p><strong>Ошибки проверки:</strong></p>
-          <ul>
-            ${source.validationErrors.map((error) => `<li>${escapeHtml(error)}</li>`).join("")}
-          </ul>
-        </div>
-      `
-      : "",
-    statusText ? `<p><strong>Статус:</strong> ${escapeStatusHtml(statusText)}</p>` : "",
-  ].filter(Boolean);
-
-  dom.validationPanel.className = `status-panel package-details-panel ${isError ? "status-error" : "status-ok"}`;
-  if (typeof dom.validationPanel.open === "boolean") {
-    dom.validationPanel.open = false;
+  state.packageLoad.statusMessage = statusText || "Техническая информация о пакете";
+  state.packageLoad.statusTone = isError ? "error" : "ok";
+  if (!isError) {
+    state.packageLoad.progress = 100;
   }
-  dom.validationPanel.innerHTML = `
-    <summary>${escapeHtml(statusText || "Техническая информация о пакете")}</summary>
-    <div class="package-details-body">
-      ${parts.join("")}
-    </div>
-  `;
+  renderLoadStatusPanel(buildLoadedPackageDetailsHtml(source, statusText, isError));
 }
 
 function escapeHtml(value) {
@@ -2039,11 +2198,22 @@ function getVisualAssetMatchCount(scenario, registry) {
 }
 
 async function loadCasePackageFromZip(zipFile, sourceLabel, operationToken) {
+  setPackageLoadState({
+    isLoading: true,
+    progress: 25,
+    statusTone: "pending",
+    statusMessage: "Чтение ZIP-пакета дела...",
+  });
   const formData = new FormData();
   formData.append("package", zipFile, zipFile.name);
   const response = await fetch("/api/import-case-package", {
     method: "POST",
     body: formData,
+  });
+  setPackageLoadState({
+    progress: 55,
+    statusTone: "pending",
+    statusMessage: "Проверка ZIP-пакета дела...",
   });
   const data = await response.json();
   if (!response.ok) {
@@ -2055,19 +2225,16 @@ async function loadCasePackageFromZip(zipFile, sourceLabel, operationToken) {
   const warnings = Array.isArray(data.warnings) ? data.warnings : [];
 
   if (!validation.ok) {
-    renderValidation("ZIP-пакет не прошёл проверку сценария.", true);
-    return;
+    throw new Error((validation.errors || ["ZIP-пакет не прошёл проверку сценария."]).join("<br>"));
   }
 
   if (operationToken !== undefined && !isActiveCaseAsyncOperationCurrent(operationToken)) {
     return;
   }
 
-  clearLoadedPackage();
-  clearCurrentRuntimeState();
-  state.loadedScenario = data.scenario;
-  state.loadedImageRegistry = createImageRegistryFromPackage(data.images);
-  state.loadedScenarioMeta = {
+  const loadedScenario = data.scenario;
+  const loadedImageRegistry = createImageRegistryFromPackage(data.images);
+  const loadedScenarioMeta = {
     sourceLabel,
     sourceType: "zip",
     packageType: "zip",
@@ -2079,6 +2246,16 @@ async function loadCasePackageFromZip(zipFile, sourceLabel, operationToken) {
     unmatchedImageCount: packageSummary.unmatched_image_count || 0,
     warnings,
   };
+
+  if (operationToken !== undefined && !isActiveCaseAsyncOperationCurrent(operationToken)) {
+    return;
+  }
+
+  clearLoadedPackage();
+  clearCurrentRuntimeState();
+  state.loadedScenario = loadedScenario;
+  state.loadedImageRegistry = loadedImageRegistry;
+  state.loadedScenarioMeta = loadedScenarioMeta;
   state.activeCaseRecord = {
     title: state.loadedScenarioMeta.title,
     sourceType: state.loadedScenarioMeta.sourceType,
@@ -2092,12 +2269,27 @@ async function loadCasePackageFromZip(zipFile, sourceLabel, operationToken) {
   state.activeCaseError = "";
   updateLoadedPackageButtons();
   resetGamePanelsToEmptyState();
+  state.packageLoad.stagedFiles = [];
+  state.packageLoad.isLoading = false;
+  state.packageLoad.progress = 100;
+  state.packageLoad.statusTone = "ok";
+  state.packageLoad.statusMessage = "ZIP-пакет дела прочитан и проверен.";
+  if (dom.casePackageInput) {
+    dom.casePackageInput.value = "";
+  }
+  updateLoadedPackageButtons();
   renderLoadedPackageStatus("ZIP-пакет дела прочитан и проверен.");
   renderActiveCaseStatus();
   void queueActiveCasePersistence();
 }
 
 async function loadCasePackageFromFiles(files, sourceLabel, operationToken) {
+  setPackageLoadState({
+    isLoading: true,
+    progress: 10,
+    statusTone: "pending",
+    statusMessage: "Подготовка выбранных файлов...",
+  });
   const fileList = Array.from(files || []);
   const zipFiles = fileList.filter(isZipFile);
   const jsonFiles = fileList.filter(isJsonFile);
@@ -2108,6 +2300,10 @@ async function loadCasePackageFromFiles(files, sourceLabel, operationToken) {
     if (zipFiles.length > 1 || jsonFiles.length || imageFiles.length || unsupportedFiles.length) {
       throw new Error("Выберите либо один ZIP-архив, либо JSON-сценарий с изображениями, но не оба варианта одновременно.");
     }
+    setPackageLoadState({
+      progress: 22,
+      statusMessage: "Загрузка ZIP-пакета дела...",
+    });
     await loadCasePackageFromZip(zipFiles[0], "ZIP-пакет дела", operationToken);
     return;
   }
@@ -2123,6 +2319,10 @@ async function loadCasePackageFromFiles(files, sourceLabel, operationToken) {
   }
 
   const scenarioFile = jsonFiles[0];
+  setPackageLoadState({
+    progress: 18,
+    statusMessage: "Чтение JSON-файла сценария...",
+  });
   let imageRegistry = createEmptyImageRegistry();
 
   try {
@@ -2131,6 +2331,11 @@ async function loadCasePackageFromFiles(files, sourceLabel, operationToken) {
       throw new Error("JSON-файл сценария пуст.");
     }
 
+    setPackageLoadState({
+      progress: 35,
+      statusMessage: "Разбор JSON-файла сценария...",
+    });
+
     let scenario;
     try {
       scenario = JSON.parse(raw);
@@ -2138,6 +2343,10 @@ async function loadCasePackageFromFiles(files, sourceLabel, operationToken) {
       throw new Error("Не удалось разобрать JSON сценария.");
     }
 
+    setPackageLoadState({
+      progress: 55,
+      statusMessage: "Проверка сценария...",
+    });
     const validation = await postJson("/api/validate-scenario", scenario);
     if (!validation.ok) {
       throw new Error(validation.errors?.join("<br>") || "JSON-файл не прошёл проверку сценария.");
@@ -2149,11 +2358,13 @@ async function loadCasePackageFromFiles(files, sourceLabel, operationToken) {
 
     imageRegistry = await createImageRegistryFromFiles(imageFiles);
     const matchedImageCount = getVisualAssetMatchCount(scenario, imageRegistry);
-    clearLoadedPackage();
-    clearCurrentRuntimeState();
-    state.loadedScenario = scenario;
-    state.loadedImageRegistry = imageRegistry;
-    state.loadedScenarioMeta = {
+
+    setPackageLoadState({
+      progress: 78,
+      statusMessage: "Формирование пакета дела...",
+    });
+
+    const loadedScenarioMeta = {
       sourceLabel,
       sourceType: "json_files",
       packageType: "json_files",
@@ -2165,6 +2376,12 @@ async function loadCasePackageFromFiles(files, sourceLabel, operationToken) {
       unmatchedImageCount: Math.max(0, imageFiles.length - matchedImageCount),
       warnings: [],
     };
+
+    clearLoadedPackage();
+    clearCurrentRuntimeState();
+    state.loadedScenario = scenario;
+    state.loadedImageRegistry = imageRegistry;
+    state.loadedScenarioMeta = loadedScenarioMeta;
     state.activeCaseRecord = {
       title: state.loadedScenarioMeta.title,
       sourceType: state.loadedScenarioMeta.sourceType,
@@ -2178,6 +2395,15 @@ async function loadCasePackageFromFiles(files, sourceLabel, operationToken) {
     state.activeCaseError = "";
     updateLoadedPackageButtons();
     resetGamePanelsToEmptyState();
+    state.packageLoad.stagedFiles = [];
+    state.packageLoad.isLoading = false;
+    state.packageLoad.progress = 100;
+    state.packageLoad.statusTone = "ok";
+    state.packageLoad.statusMessage = "Пакет дела прочитан и проверен.";
+    if (dom.casePackageInput) {
+      dom.casePackageInput.value = "";
+    }
+    updateLoadedPackageButtons();
     renderLoadedPackageStatus("Пакет дела прочитан и проверен.");
     renderActiveCaseStatus();
     void queueActiveCasePersistence();
@@ -2725,7 +2951,6 @@ function startScenarioFromResponse(data) {
   renderAll();
   renderActiveCaseStatus();
   void queueActiveCasePersistence();
-  void playCaseIntroNarration({ manual: false });
 }
 
 async function restartScenarioFromLoadedPackage() {
@@ -2789,7 +3014,6 @@ function handleDialogueClick(actionId) {
     };
   }
   void queueActiveCasePersistence();
-  void playDialogueNarration(action.id, { manual: false });
 }
 
 function handleEvidenceClick(evidenceId) {
@@ -2837,76 +3061,91 @@ function handleVerdictClick(verdictId) {
     };
   }
   void queueActiveCasePersistence();
-  void playVerdictNarration(verdict.id, { manual: false });
 }
 
-dom.loadDemoBtn.addEventListener("click", async () => {
-  const operationToken = beginActiveCaseAsyncOperation();
-  try {
-    const response = await fetch("/api/demo-scenario");
-    const data = await response.json();
-    const validation = await postJson("/api/validate-scenario", data);
-    if (!validation.ok) {
-      throw new Error(validation.errors?.join("<br>") || "Демо-сценарий не прошёл проверку.");
-    }
-    if (!isActiveCaseAsyncOperationCurrent(operationToken)) {
-      return;
-    }
-    clearLoadedPackage();
-    clearCurrentRuntimeState();
-    state.loadedScenario = data;
-    state.loadedImageRegistry = createEmptyImageRegistry();
-    state.loadedScenarioMeta = {
-      sourceLabel: "Встроенный демо-пакет",
-      sourceType: "demo",
-      packageType: "demo",
-      fileName: "demo_case.json",
-      sizeBytes: new Blob([JSON.stringify(data)]).size,
-      title: getScenarioTitle(data),
-      selectedImageCount: 0,
-      matchedImageCount: 0,
-      unmatchedImageCount: 0,
-      warnings: [],
-    };
-    state.activeCaseRecord = {
-      title: state.loadedScenarioMeta.title,
-      sourceType: state.loadedScenarioMeta.sourceType,
-      sourceLabel: state.loadedScenarioMeta.sourceLabel,
-      savedAt: new Date().toISOString(),
-      selectedImageCount: 0,
-      packageStatus: "loaded",
-      gameplayStarted: false,
-    };
-    state.activeCaseNotice = "Активное дело сохранено в памяти браузера.";
-    state.activeCaseError = "";
-    updateLoadedPackageButtons();
-    resetGamePanelsToEmptyState();
-    dom.casePackageInput.value = "";
-    renderLoadedPackageStatus("Демо-пакет проверен и готов к запуску.");
-    renderActiveCaseStatus();
-    void queueActiveCasePersistence();
-  } catch (error) {
-    if (!isActiveCaseAsyncOperationCurrent(operationToken)) {
-      return;
-    }
-    renderValidation(`Не удалось загрузить демо-сценарий: ${error.message}`, true);
-  }
-});
-
-dom.casePackageInput.addEventListener("change", async () => {
-  const operationToken = beginActiveCaseAsyncOperation();
-  try {
+if (dom.casePackageInput) {
+  dom.casePackageInput.addEventListener("change", () => {
     if (!dom.casePackageInput.files || !dom.casePackageInput.files.length) {
-      throw new Error("Пакет дела не выбран.");
-    }
-    await loadCasePackageFromFiles(dom.casePackageInput.files, "Пакет дела", operationToken);
-  } catch (error) {
-    if (!isActiveCaseAsyncOperationCurrent(operationToken)) {
+      stageCaseFiles([], "Файлы не выбраны");
       return;
     }
-    renderValidation(`Ошибка загрузки пакета дела: ${error.message}`, true);
-  }
-});
+    stageCaseFiles(dom.casePackageInput.files, "Выбраны файлы");
+    dom.casePackageInput.value = "";
+  });
+}
+
+if (dom.loaderPanel) {
+  const updateDropTargetState = (isActive) => {
+    dom.loaderPanel.classList.toggle("is-drop-target", isActive);
+  };
+
+  dom.loaderPanel.addEventListener("dragover", (event) => {
+    if (state.packageLoad.isLoading) {
+      return;
+    }
+    const files = event.dataTransfer?.files;
+    if (!files || !files.length) {
+      return;
+    }
+    event.preventDefault();
+    updateDropTargetState(true);
+  });
+
+  dom.loaderPanel.addEventListener("dragenter", (event) => {
+    if (state.packageLoad.isLoading) {
+      return;
+    }
+    const files = event.dataTransfer?.files;
+    if (!files || !files.length) {
+      return;
+    }
+    event.preventDefault();
+    updateDropTargetState(true);
+  });
+
+  dom.loaderPanel.addEventListener("dragleave", (event) => {
+    if (!dom.loaderPanel.contains(event.relatedTarget)) {
+      updateDropTargetState(false);
+    }
+  });
+
+  dom.loaderPanel.addEventListener("drop", (event) => {
+    const files = event.dataTransfer?.files;
+    event.preventDefault();
+    updateDropTargetState(false);
+    if (state.packageLoad.isLoading) {
+      return;
+    }
+    if (!files || !files.length) {
+      return;
+    }
+    stageCaseFiles(files, "Перетащенные файлы");
+  });
+}
+
+if (dom.loadCaseBtn) {
+  dom.loadCaseBtn.addEventListener("click", async () => {
+    const stagedFiles = Array.from(state.packageLoad.stagedFiles || []);
+    if (!stagedFiles.length) {
+      renderValidation("Сначала выберите файлы для загрузки.", true);
+      return;
+    }
+    const operationToken = beginActiveCaseAsyncOperation();
+    try {
+      await loadCasePackageFromFiles(stagedFiles, "Пакет дела", operationToken);
+    } catch (error) {
+      if (!isActiveCaseAsyncOperationCurrent(operationToken)) {
+        return;
+      }
+      setCaseLoadError(`Ошибка загрузки пакета дела: ${error.message}`);
+      if (state.loadedScenarioMeta) {
+        renderLoadedPackageStatus(`Ошибка загрузки пакета дела: ${error.message}`, true);
+      } else {
+        renderValidation(`Ошибка загрузки пакета дела: ${error.message}`, true);
+      }
+    }
+  });
+}
 
 dom.startScenarioBtn.addEventListener("click", async () => {
   const operationToken = beginActiveCaseAsyncOperation();
@@ -3021,8 +3260,8 @@ if (dom.deleteActiveCaseBtn) {
     if (dom.casePackageInput) {
       dom.casePackageInput.disabled = true;
     }
-    if (dom.loadDemoBtn) {
-      dom.loadDemoBtn.disabled = true;
+    if (dom.loadCaseBtn) {
+      dom.loadCaseBtn.disabled = true;
     }
     dom.startScenarioBtn.disabled = true;
     dom.deleteActiveCaseBtn.disabled = true;
@@ -3043,8 +3282,8 @@ if (dom.deleteActiveCaseBtn) {
       if (dom.casePackageInput) {
         dom.casePackageInput.disabled = false;
       }
-      if (dom.loadDemoBtn) {
-        dom.loadDemoBtn.disabled = false;
+      if (dom.loadCaseBtn) {
+        dom.loadCaseBtn.disabled = !state.packageLoad.stagedFiles.length || state.packageLoad.isLoading;
       }
       updateLoadedPackageButtons();
       renderActiveCaseStatus();
