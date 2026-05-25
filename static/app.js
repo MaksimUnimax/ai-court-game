@@ -47,6 +47,7 @@ const state = {
     scale: 1,
     fitWidth: 0,
     fitHeight: 0,
+    baseMeasurementFrame: null,
     drag: {
       active: false,
       pointerId: null,
@@ -1667,6 +1668,14 @@ function stopImageViewerDrag() {
   updateImageViewerDragStateClass();
 }
 
+function clearImageViewerBaseMeasurement() {
+  const { baseMeasurementFrame } = state.imageViewer;
+  if (baseMeasurementFrame !== null) {
+    window.cancelAnimationFrame(baseMeasurementFrame);
+    state.imageViewer.baseMeasurementFrame = null;
+  }
+}
+
 function getImageViewerInputId(event) {
   if (Number.isFinite(event.pointerId)) {
     return event.pointerId;
@@ -1717,6 +1726,40 @@ function beginImageViewerDrag(event) {
   updateImageViewerDragStateClass();
 }
 
+function measureImageViewerBaseSize() {
+  if (!dom.imageViewerImage || !dom.imageViewerViewport || !state.imageViewer.open) {
+    return false;
+  }
+
+  const naturalWidth = dom.imageViewerImage.naturalWidth;
+  const naturalHeight = dom.imageViewerImage.naturalHeight;
+  if (!naturalWidth || !naturalHeight) {
+    return false;
+  }
+
+  const viewportStyle = window.getComputedStyle(dom.imageViewerViewport);
+  const paddingX = (Number.parseFloat(viewportStyle.paddingLeft) || 0) + (Number.parseFloat(viewportStyle.paddingRight) || 0);
+  const paddingY = (Number.parseFloat(viewportStyle.paddingTop) || 0) + (Number.parseFloat(viewportStyle.paddingBottom) || 0);
+  const availableWidth = Math.max(1, dom.imageViewerViewport.clientWidth - paddingX);
+  const availableHeight = Math.max(1, dom.imageViewerViewport.clientHeight - paddingY);
+  const fitScale = Math.min(availableWidth / naturalWidth, availableHeight / naturalHeight, 1);
+
+  state.imageViewer.fitWidth = Math.max(1, Math.round(naturalWidth * fitScale));
+  state.imageViewer.fitHeight = Math.max(1, Math.round(naturalHeight * fitScale));
+  return true;
+}
+
+function scheduleImageViewerBaseMeasurement() {
+  clearImageViewerBaseMeasurement();
+  state.imageViewer.baseMeasurementFrame = window.requestAnimationFrame(() => {
+    state.imageViewer.baseMeasurementFrame = null;
+    if (!measureImageViewerBaseSize()) {
+      return;
+    }
+    updateImageViewerImageSize();
+  });
+}
+
 function updateImageViewerDrag(event) {
   const viewport = dom.imageViewerViewport;
   const drag = state.imageViewer.drag;
@@ -1759,9 +1802,13 @@ function renderImageViewer() {
   dom.imageViewerImage.src = state.imageViewer.url;
   dom.imageViewerImage.alt = state.imageViewer.alt || state.imageViewer.title || "Иллюстрация";
   dom.imageViewerScale.textContent = `${Math.round(state.imageViewer.scale * 100)}%`;
-  scheduleImageViewerBaseMeasurement();
   updateBodyScrollLock();
   updateImageViewerDragStateClass();
+  if (!state.imageViewer.fitWidth || !state.imageViewer.fitHeight) {
+    scheduleImageViewerBaseMeasurement();
+  } else {
+    updateImageViewerImageSize();
+  }
 }
 
 function updateImageViewerImageSize() {
@@ -1788,33 +1835,9 @@ function updateImageViewerImageSize() {
   }
 }
 
-function measureImageViewerBaseSize() {
-  if (!dom.imageViewerImage || !state.imageViewer.open) {
-    return false;
-  }
-  const rect = dom.imageViewerImage.getBoundingClientRect();
-  if (!rect.width || !rect.height) {
-    return false;
-  }
-  state.imageViewer.fitWidth = rect.width;
-  state.imageViewer.fitHeight = rect.height;
-  return true;
-}
-
-function scheduleImageViewerBaseMeasurement() {
-  window.requestAnimationFrame(() => {
-    if (!state.imageViewer.open || !dom.imageViewerImage) {
-      return;
-    }
-    if (!measureImageViewerBaseSize()) {
-      return;
-    }
-    updateImageViewerImageSize();
-  });
-}
-
 function closeImageViewer() {
   stopImageViewerDrag();
+  clearImageViewerBaseMeasurement();
   state.imageViewer.open = false;
   state.imageViewer.assetId = null;
   state.imageViewer.title = "";
@@ -1844,6 +1867,7 @@ function openImageViewerFromSource(source) {
     return;
   }
   stopImageViewerDrag();
+  clearImageViewerBaseMeasurement();
   state.imageViewer.open = true;
   state.imageViewer.assetId = source.assetId || null;
   state.imageViewer.title = source.title || source.alt || "Иллюстрация";
@@ -3069,6 +3093,11 @@ if (dom.imageViewerViewport) {
     },
     { passive: false }
   );
+  window.addEventListener("resize", () => {
+    if (state.imageViewer.open) {
+      scheduleImageViewerBaseMeasurement();
+    }
+  });
   dom.imageViewerViewport.addEventListener("pointerdown", beginImageViewerDrag);
   dom.imageViewerViewport.addEventListener("pointermove", updateImageViewerDrag);
   dom.imageViewerViewport.addEventListener("pointerup", endImageViewerDrag);
