@@ -19,7 +19,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, urlparse
 
-from app import scenario_library
+try:
+    from app import scenario_library
+except ModuleNotFoundError:  # pragma: no cover - script execution fallback
+    import scenario_library
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
