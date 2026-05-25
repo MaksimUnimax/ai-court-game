@@ -1649,7 +1649,7 @@ function updateImageViewerDragStateClass() {
 function stopImageViewerDrag() {
   const drag = state.imageViewer.drag;
   const viewport = dom.imageViewerViewport;
-  if (viewport && drag.active && drag.pointerId !== null && typeof viewport.releasePointerCapture === "function") {
+  if (viewport && drag.active && drag.pointerId !== null && drag.pointerId !== "mouse" && typeof viewport.releasePointerCapture === "function") {
     try {
       if (viewport.hasPointerCapture?.(drag.pointerId)) {
         viewport.releasePointerCapture(drag.pointerId);
@@ -1665,6 +1665,13 @@ function stopImageViewerDrag() {
   drag.startScrollLeft = 0;
   drag.startScrollTop = 0;
   updateImageViewerDragStateClass();
+}
+
+function getImageViewerInputId(event) {
+  if (Number.isFinite(event.pointerId)) {
+    return event.pointerId;
+  }
+  return "mouse";
 }
 
 function isImageViewerScrollable() {
@@ -1684,6 +1691,9 @@ function beginImageViewerDrag(event) {
   if (!viewport || !state.imageViewer.open || !state.imageViewer.url) {
     return;
   }
+  if (state.imageViewer.drag.active) {
+    return;
+  }
   if (event.button !== 0 || event.pointerType === "mouse" && event.buttons !== 1) {
     return;
   }
@@ -1691,14 +1701,13 @@ function beginImageViewerDrag(event) {
     return;
   }
   event.preventDefault();
-  stopImageViewerDrag();
   state.imageViewer.drag.active = true;
-  state.imageViewer.drag.pointerId = event.pointerId;
+  state.imageViewer.drag.pointerId = getImageViewerInputId(event);
   state.imageViewer.drag.startX = event.clientX;
   state.imageViewer.drag.startY = event.clientY;
   state.imageViewer.drag.startScrollLeft = viewport.scrollLeft;
   state.imageViewer.drag.startScrollTop = viewport.scrollTop;
-  if (typeof viewport.setPointerCapture === "function") {
+  if (state.imageViewer.drag.pointerId !== "mouse" && typeof viewport.setPointerCapture === "function") {
     try {
       viewport.setPointerCapture(event.pointerId);
     } catch {
@@ -1711,7 +1720,7 @@ function beginImageViewerDrag(event) {
 function updateImageViewerDrag(event) {
   const viewport = dom.imageViewerViewport;
   const drag = state.imageViewer.drag;
-  if (!viewport || !drag.active || drag.pointerId !== event.pointerId) {
+  if (!viewport || !drag.active || drag.pointerId !== getImageViewerInputId(event)) {
     return;
   }
   event.preventDefault();
@@ -1726,7 +1735,7 @@ function endImageViewerDrag(event) {
   if (!drag.active) {
     return;
   }
-  if (event && drag.pointerId !== null && event.pointerId !== drag.pointerId) {
+  if (event && drag.pointerId !== null && drag.pointerId !== getImageViewerInputId(event)) {
     return;
   }
   stopImageViewerDrag();
@@ -3065,6 +3074,10 @@ if (dom.imageViewerViewport) {
   dom.imageViewerViewport.addEventListener("pointerup", endImageViewerDrag);
   dom.imageViewerViewport.addEventListener("pointercancel", endImageViewerDrag);
   dom.imageViewerViewport.addEventListener("lostpointercapture", endImageViewerDrag);
+  dom.imageViewerViewport.addEventListener("mousedown", beginImageViewerDrag);
+  dom.imageViewerViewport.addEventListener("mousemove", updateImageViewerDrag);
+  dom.imageViewerViewport.addEventListener("mouseup", endImageViewerDrag);
+  dom.imageViewerViewport.addEventListener("mouseleave", endImageViewerDrag);
 }
 
 document.addEventListener("keydown", (event) => {
