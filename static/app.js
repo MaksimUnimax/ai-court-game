@@ -12,6 +12,7 @@ const state = {
   dialogueHistoryByParticipant: new Map(),
   tts: {
     enabled: readVoiceSetting(),
+    volume: readVoiceVolumeSetting(),
     statusMessage: "",
     statusTone: "muted",
     currentAudio: null,
@@ -38,6 +39,8 @@ const dom = {
   deleteActiveCaseBtn: document.querySelector("#delete-active-case-btn"),
   voiceToggleBtn: document.querySelector("#voice-toggle-btn"),
   stopVoiceBtn: document.querySelector("#stop-voice-btn"),
+  voiceVolumeSlider: document.querySelector("#voice-volume-slider"),
+  voiceVolumeValue: document.querySelector("#voice-volume-value"),
   ttsStatusPanel: document.querySelector("#tts-status-panel"),
   validationPanel: document.querySelector("#validation-panel"),
   activeCasePanel: document.querySelector("#active-case-status-panel"),
@@ -79,6 +82,8 @@ const ACTIVE_CASE_DB_VERSION = 1;
 const ACTIVE_CASE_STORE_NAME = "active_cases";
 const ACTIVE_CASE_STORAGE_KEY = "current";
 const VOICE_SETTING_STORAGE_KEY = "ai-court-game-voice-enabled";
+const VOICE_VOLUME_STORAGE_KEY = "ai-court-game-voice-volume";
+const DEFAULT_TTS_VOLUME = 80;
 let activeCaseAsyncToken = 0;
 
 function readVoiceSetting() {
@@ -93,6 +98,31 @@ function readVoiceSetting() {
 function writeVoiceSetting(value) {
   try {
     window.localStorage.setItem(VOICE_SETTING_STORAGE_KEY, String(Boolean(value)));
+  } catch (_error) {
+    return;
+  }
+}
+
+function clampVolumePercent(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return DEFAULT_TTS_VOLUME;
+  }
+  return Math.max(0, Math.min(100, Math.round(numeric)));
+}
+
+function readVoiceVolumeSetting() {
+  try {
+    const savedValue = window.localStorage.getItem(VOICE_VOLUME_STORAGE_KEY);
+    return savedValue === null ? DEFAULT_TTS_VOLUME : clampVolumePercent(savedValue);
+  } catch (_error) {
+    return DEFAULT_TTS_VOLUME;
+  }
+}
+
+function writeVoiceVolumeSetting(value) {
+  try {
+    window.localStorage.setItem(VOICE_VOLUME_STORAGE_KEY, String(clampVolumePercent(value)));
   } catch (_error) {
     return;
   }
@@ -158,6 +188,15 @@ function renderTtsControls() {
   if (dom.stopVoiceBtn) {
     dom.stopVoiceBtn.disabled = !state.tts.isBusy && !state.tts.currentAudio;
   }
+  if (dom.voiceVolumeSlider) {
+    dom.voiceVolumeSlider.value = String(state.tts.volume);
+  }
+  if (dom.voiceVolumeValue) {
+    dom.voiceVolumeValue.textContent = `${state.tts.volume}%`;
+  }
+  if (state.tts.currentAudio) {
+    state.tts.currentAudio.volume = state.tts.volume / 100;
+  }
   if (dom.ttsStatusPanel) {
     const toneClass =
       state.tts.statusTone === "error"
@@ -181,6 +220,15 @@ function toggleVoiceSetting() {
     return;
   }
   setTtsStatus("Озвучка готова", "ok");
+}
+
+function updateVoiceVolume(value) {
+  state.tts.volume = clampVolumePercent(value);
+  writeVoiceVolumeSetting(state.tts.volume);
+  if (state.tts.currentAudio) {
+    state.tts.currentAudio.volume = state.tts.volume / 100;
+  }
+  renderTtsControls();
 }
 
 async function requestTtsPlayback(payload, options = {}) {
@@ -227,6 +275,7 @@ async function requestTtsPlayback(payload, options = {}) {
 
     const objectUrl = URL.createObjectURL(audioBlob);
     const audio = new Audio(objectUrl);
+    audio.volume = state.tts.volume / 100;
     state.tts.currentObjectUrl = objectUrl;
     state.tts.currentAudio = audio;
     state.tts.abortController = null;
@@ -325,6 +374,18 @@ function buildFinalExplanationTtsText() {
   ]);
 }
 
+function buildEvidenceTtsText(evidenceId) {
+  const evidence = state.scenario?.evidence?.find((item) => item.id === evidenceId);
+  if (!evidence) {
+    return "";
+  }
+  return joinNarrationParts([
+    `Доказательство. ${evidence.title || ""}`,
+    evidence.short_description || evidence.short_text,
+    evidence.inspection_text || evidence.inspect_text,
+  ]);
+}
+
 function playCaseIntroNarration(options = {}) {
   return requestTtsPlayback(
     {
@@ -369,6 +430,17 @@ function playFinalExplanationNarration(options = {}) {
       text: buildFinalExplanationTtsText(),
       voice_role: "verdict",
       content_id: "final_explanation",
+    },
+    options
+  );
+}
+
+function playEvidenceNarration(evidenceId, options = {}) {
+  return requestTtsPlayback(
+    {
+      text: buildEvidenceTtsText(evidenceId),
+      voice_role: "evidence",
+      content_id: `evidence:${evidenceId}`,
     },
     options
   );
@@ -1711,6 +1783,11 @@ function renderEvidence() {
           <button type="button" data-evidence-id="${escapeHtml(evidence.id)}">
             ${opened ? "Пересмотреть доказательство" : "Открыть доказательство"}
           </button>
+          <div class="tts-action-row">
+            <button type="button" class="tts-action-button" data-tts-evidence-id="${escapeHtml(evidence.id)}">
+              Прослушать доказательство
+            </button>
+          </div>
         </div>
       `;
     })
@@ -1729,6 +1806,11 @@ function renderEvidence() {
     <p>${escapeHtml(selectedEvidence.inspection_text)}</p>
     <p><strong>Что оно доказывает:</strong> ${escapeHtml(selectedEvidence.proves)}</p>
     <p><strong>Ключевое доказательство:</strong> ${selectedEvidence.key_evidence ? "да" : "нет"}</p>
+    <div class="tts-action-row">
+      <button type="button" class="tts-action-button" data-tts-evidence-id="${escapeHtml(selectedEvidence.id)}">
+        Прослушать описание доказательства
+      </button>
+    </div>
   `;
 }
 
@@ -2082,6 +2164,12 @@ if (dom.stopVoiceBtn) {
   });
 }
 
+if (dom.voiceVolumeSlider) {
+  dom.voiceVolumeSlider.addEventListener("input", (event) => {
+    updateVoiceVolume(event.target.value);
+  });
+}
+
 if (dom.restartScenarioBtn) {
   dom.restartScenarioBtn.addEventListener("click", restartScenarioFromLoadedPackage);
 }
@@ -2201,6 +2289,11 @@ document.addEventListener("click", (event) => {
 
   if (targetElement?.closest("[data-tts-final-explanation]") && state.scenario && state.engine?.finished) {
     void playFinalExplanationNarration({ manual: true });
+  }
+
+  const ttsEvidenceId = targetElement?.getAttribute("data-tts-evidence-id");
+  if (ttsEvidenceId && state.scenario && state.engine) {
+    void playEvidenceNarration(ttsEvidenceId, { manual: true });
   }
 
   const participantId = targetElement?.getAttribute("data-participant-id");

@@ -177,6 +177,22 @@ h1 {
   flex-wrap: wrap;
   gap: 12px;
   margin-top: 14px;
+  align-items: center;
+}
+
+.voice-volume-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(91, 77, 62, 0.16);
+  color: var(--ink);
+}
+
+.voice-volume-control input {
+  width: 150px;
 }
 
 button {

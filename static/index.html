@@ -45,6 +45,11 @@
           <div class="voice-controls">
             <button id="voice-toggle-btn" type="button">Голос: выключен</button>
             <button id="stop-voice-btn" type="button">Остановить голос</button>
+            <label class="voice-volume-control" for="voice-volume-slider">
+              <span>Громкость</span>
+              <input id="voice-volume-slider" type="range" min="0" max="100" step="1" value="80" />
+              <span id="voice-volume-value">80%</span>
+            </label>
           </div>
           <div id="tts-status-panel" class="status-panel">Голос выключен</div>
           <div id="active-case-status-panel" class="status-panel empty-state">

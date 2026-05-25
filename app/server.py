@@ -7,6 +7,7 @@ import json
 import mimetypes
 import os
 import posixpath
+import re
 import tempfile
 import threading
 import zipfile
@@ -35,10 +36,12 @@ MAX_TTS_TEXT_LENGTH = 1800
 TTS_LANGUAGE = "ru"
 TTS_MODEL_NAME = "v5_ru"
 TTS_SAMPLE_RATE = 48000
-TTS_ALLOWED_ROLES = {"narrator", "participant", "verdict"}
+TTS_ALLOWED_ROLES = {"narrator", "participant", "verdict", "evidence"}
 TTS_REQUIRED_MODULES = ("torch", "silero", "numpy", "scipy", "omegaconf")
 TTS_NARRATOR_SPEAKERS = ("kseniya", "xenia", "baya", "aidar", "eugene")
 TTS_VERDICT_SPEAKERS = ("xenia", "kseniya", "baya", "aidar", "eugene")
+TTS_EVIDENCE_SPEAKERS = ("baya", "kseniya", "xenia", "eugene", "aidar")
+TTS_PARTICIPANT_SPEAKERS = ("aidar", "baya", "eugene", "kseniya", "xenia")
 
 REQUIRED_TOP_LEVEL_KEYS = {
     "metadata",
@@ -91,6 +94,7 @@ SUPPORTED_PACKAGE_IMAGE_EXTENSIONS = {
 _tts_model = None
 _tts_speakers = ()
 _tts_runtime_version = None
+_tts_participant_speaker_map = {}
 _tts_model_lock = threading.Lock()
 
 
@@ -163,6 +167,145 @@ def normalize_whitespace(value):
     return " ".join(str(value or "").split())
 
 
+def pluralize_ru(value, singular, paucal, plural):
+    value = abs(int(value))
+    last_two = value % 100
+    if 11 <= last_two <= 14:
+        return plural
+    last = value % 10
+    if last == 1:
+        return singular
+    if 2 <= last <= 4:
+        return paucal
+    return plural
+
+
+def int_to_ru_words(value, feminine=False):
+    value = int(value)
+    if value == 0:
+        return "ноль"
+    if value < 0:
+        return f"минус {int_to_ru_words(abs(value), feminine=feminine)}"
+
+    units_m = [
+        "",
+        "один",
+        "два",
+        "три",
+        "четыре",
+        "пять",
+        "шесть",
+        "семь",
+        "восемь",
+        "девять",
+    ]
+    units_f = [
+        "",
+        "одна",
+        "две",
+        "три",
+        "четыре",
+        "пять",
+        "шесть",
+        "семь",
+        "восемь",
+        "девять",
+    ]
+    teens = {
+        10: "десять",
+        11: "одиннадцать",
+        12: "двенадцать",
+        13: "тринадцать",
+        14: "четырнадцать",
+        15: "пятнадцать",
+        16: "шестнадцать",
+        17: "семнадцать",
+        18: "восемнадцать",
+        19: "девятнадцать",
+    }
+    tens = {
+        2: "двадцать",
+        3: "тридцать",
+        4: "сорок",
+        5: "пятьдесят",
+        6: "шестьдесят",
+        7: "семьдесят",
+        8: "восемьдесят",
+        9: "девяносто",
+    }
+    hundreds = {
+        1: "сто",
+        2: "двести",
+        3: "триста",
+        4: "четыреста",
+        5: "пятьсот",
+        6: "шестьсот",
+        7: "семьсот",
+        8: "восемьсот",
+        9: "девятьсот",
+    }
+
+    def chunk_to_words(chunk, use_feminine=False):
+        words = []
+        if chunk >= 100:
+            words.append(hundreds[chunk // 100])
+            chunk %= 100
+        if 10 <= chunk <= 19:
+            words.append(teens[chunk])
+            return words
+        if chunk >= 20:
+            words.append(tens[chunk // 10])
+            chunk %= 10
+        if chunk:
+            words.append((units_f if use_feminine else units_m)[chunk])
+        return words
+
+    words = []
+    thousands = value // 1000
+    remainder = value % 1000
+
+    if thousands:
+        words.extend(chunk_to_words(thousands, use_feminine=True))
+        words.append(pluralize_ru(thousands, "тысяча", "тысячи", "тысяч"))
+    if remainder:
+        words.extend(chunk_to_words(remainder, use_feminine=feminine))
+    return " ".join(word for word in words if word)
+
+
+def normalize_tts_text_ru(text):
+    normalized = normalize_whitespace(text)
+    if not normalized:
+        return normalized
+
+    def replace_time(match):
+        hours = int(match.group(1))
+        minutes = int(match.group(2))
+        if minutes == 0:
+            return f"{int_to_ru_words(hours)} {pluralize_ru(hours, 'час', 'часа', 'часов')} ровно"
+        return (
+            f"{int_to_ru_words(hours)} {pluralize_ru(hours, 'час', 'часа', 'часов')} "
+            f"{int_to_ru_words(minutes)} {pluralize_ru(minutes, 'минута', 'минуты', 'минут')}"
+        )
+
+    def replace_percentage(match):
+        value = int(match.group(1))
+        return f"{int_to_ru_words(value)} {pluralize_ru(value, 'процент', 'процента', 'процентов')}"
+
+    def replace_money(match):
+        value = int(match.group(1))
+        return f"{int_to_ru_words(value)} {pluralize_ru(value, 'рубль', 'рубля', 'рублей')}"
+
+    def replace_integer(match):
+        value = int(match.group(0))
+        return int_to_ru_words(value)
+
+    normalized = re.sub(r"\b([01]?\d|2[0-3]):([0-5]\d)\b", replace_time, normalized)
+    normalized = re.sub(r"\b(\d{1,4})\s*%", replace_percentage, normalized)
+    normalized = re.sub(r"\b(\d{1,4})\s*(?:руб(?:\.|ля|лей|ль)?|₽)\b", replace_money, normalized, flags=re.IGNORECASE)
+    normalized = re.sub(r"\b\d{1,4}\b", replace_integer, normalized)
+    return normalize_whitespace(normalized)
+
+
 def ensure_runtime_directory(path):
     path.mkdir(parents=True, exist_ok=True)
     return path
@@ -194,10 +337,11 @@ def validate_tts_payload(payload):
 
     voice_role = normalize_whitespace(payload.get("voice_role", "narrator")).lower() or "narrator"
     if voice_role not in TTS_ALLOWED_ROLES:
-        raise TTSRequestError("Недопустимая роль озвучки. Разрешены narrator, participant и verdict.")
+        raise TTSRequestError("Недопустимая роль озвучки. Разрешены narrator, participant, verdict и evidence.")
 
     return {
         "text": normalized_text,
+        "speech_text": normalize_tts_text_ru(normalized_text),
         "voice_role": voice_role,
         "participant_id": normalize_whitespace(payload.get("participant_id", "")),
         "dialogue_action_id": normalize_whitespace(payload.get("dialogue_action_id", "")),
@@ -240,16 +384,28 @@ def select_tts_speaker(request_data, available_speakers):
         return choose_preferred_speaker(available_speakers, TTS_NARRATOR_SPEAKERS)
     if voice_role == "verdict":
         return choose_preferred_speaker(available_speakers, TTS_VERDICT_SPEAKERS)
+    if voice_role == "evidence":
+        return choose_preferred_speaker(available_speakers, TTS_EVIDENCE_SPEAKERS)
 
     ordered_speakers = [
-        speaker for speaker in dict.fromkeys(TTS_NARRATOR_SPEAKERS + tuple(available_speakers)) if speaker in available_speakers
+        speaker for speaker in dict.fromkeys(TTS_PARTICIPANT_SPEAKERS + tuple(available_speakers)) if speaker in available_speakers
     ]
-    participant_id = request_data.get("participant_id") or request_data.get("dialogue_action_id") or request_data.get("content_id")
-    if not participant_id:
-        return choose_preferred_speaker(available_speakers, ordered_speakers)
+    narrator_speaker = choose_preferred_speaker(available_speakers, TTS_NARRATOR_SPEAKERS)
+    verdict_speaker = choose_preferred_speaker(available_speakers, TTS_VERDICT_SPEAKERS)
+    participant_pool = [speaker for speaker in ordered_speakers if speaker not in {narrator_speaker, verdict_speaker}]
+    if not participant_pool:
+        participant_pool = ordered_speakers
 
-    digest = hashlib.sha256(participant_id.encode("utf-8")).hexdigest()
-    return ordered_speakers[int(digest, 16) % len(ordered_speakers)]
+    participant_id = request_data.get("participant_id")
+    if not participant_id:
+        return choose_preferred_speaker(available_speakers, participant_pool)
+
+    with _tts_model_lock:
+        if participant_id not in _tts_participant_speaker_map:
+            _tts_participant_speaker_map[participant_id] = participant_pool[
+                len(_tts_participant_speaker_map) % len(participant_pool)
+            ]
+        return _tts_participant_speaker_map[participant_id]
 
 
 def load_tts_runtime():
@@ -288,6 +444,7 @@ def build_tts_cache_path(request_data, speaker, runtime_version):
     ensure_runtime_directory(TTS_CACHE_DIR)
     cache_payload = {
         "text": request_data["text"],
+        "speech_text": request_data["speech_text"],
         "voice_role": request_data["voice_role"],
         "participant_id": request_data.get("participant_id", ""),
         "dialogue_action_id": request_data.get("dialogue_action_id", ""),
@@ -325,7 +482,7 @@ def synthesize_tts_audio(payload):
             temp_file = Path(temp_handle.name)
 
         model.save_wav(
-            text=request_data["text"],
+            text=request_data["speech_text"],
             speaker=speaker,
             audio_path=str(temp_file),
             sample_rate=TTS_SAMPLE_RATE,
@@ -959,7 +1116,11 @@ class AppHandler(BaseHTTPRequestHandler):
             HTTPStatus.OK,
             result["audio"],
             "audio/wav",
-            extra_headers={"X-TTS-Speaker": result["speaker"], "X-TTS-Cache": "hit" if result["cached"] else "miss"},
+            extra_headers={
+                "X-TTS-Speaker": result["speaker"],
+                "X-AI-Court-TTS-Speaker": result["speaker"],
+                "X-TTS-Cache": "hit" if result["cached"] else "miss",
+            },
         )
 
     def serve_static(self, relative_path):

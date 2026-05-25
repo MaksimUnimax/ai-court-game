@@ -86,9 +86,39 @@ class TtsValidationTests(unittest.TestCase):
             server.validate_tts_payload({"text": "а" * (server.MAX_TTS_TEXT_LENGTH + 1)})
 
     def test_tts_accepts_supported_voice_roles(self):
-        for voice_role in ("narrator", "participant", "verdict"):
+        for voice_role in ("narrator", "participant", "verdict", "evidence"):
             payload = server.validate_tts_payload({"text": "Тестовая реплика", "voice_role": voice_role})
             self.assertEqual(payload["voice_role"], voice_role)
+
+    def test_tts_normalizes_numbers_percentages_and_time(self):
+        normalized = server.normalize_tts_text_ru("В деле есть 4 доказательства. Сигнал прозвучал в 22:40. Вероятность 15%.")
+        self.assertIn("четыре", normalized)
+        self.assertIn("пятнадцать процентов", normalized)
+        self.assertNotIn("22:40", normalized)
+
+    def test_tts_normalizes_money_and_years(self):
+        normalized = server.normalize_tts_text_ru("В 2026 году спорили о 500 руб.")
+        self.assertIn("две тысячи двадцать шесть", normalized)
+        self.assertIn("пятьсот рублей", normalized)
+
+
+class TtsSpeakerSelectionTests(unittest.TestCase):
+    def setUp(self):
+        server._tts_participant_speaker_map.clear()
+
+    def test_same_participant_keeps_same_speaker(self):
+        available = ("aidar", "baya", "kseniya", "eugene", "xenia")
+        payload = {"voice_role": "participant", "participant_id": "accused"}
+        speaker_a = server.select_tts_speaker(payload, available)
+        speaker_b = server.select_tts_speaker(payload, available)
+        self.assertEqual(speaker_a, speaker_b)
+
+    def test_different_participants_get_different_speakers_when_possible(self):
+        available = ("aidar", "baya", "kseniya", "eugene", "xenia")
+        speaker_a = server.select_tts_speaker({"voice_role": "participant", "participant_id": "accused"}, available)
+        speaker_b = server.select_tts_speaker({"voice_role": "participant", "participant_id": "prosecutor"}, available)
+        speaker_c = server.select_tts_speaker({"voice_role": "participant", "participant_id": "defense"}, available)
+        self.assertEqual(len({speaker_a, speaker_b, speaker_c}), 3)
 
 
 class TtsEndpointTests(unittest.TestCase):
