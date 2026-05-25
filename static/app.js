@@ -1,3 +1,14 @@
+const IMAGE_VIEWER_MIN_SCALE = 0.5;
+const IMAGE_VIEWER_MAX_SCALE = 4;
+const IMAGE_VIEWER_STEP = 0.2;
+const ACTIVE_CASE_DB_NAME = "ai-court-game";
+const ACTIVE_CASE_DB_VERSION = 1;
+const ACTIVE_CASE_STORE_NAME = "active_cases";
+const ACTIVE_CASE_STORAGE_KEY = "current";
+const VOICE_SETTING_STORAGE_KEY = "ai-court-game-voice-enabled";
+const VOICE_VOLUME_STORAGE_KEY = "ai-court-game-voice-volume";
+const DEFAULT_TTS_VOLUME = 80;
+
 const state = {
   scenario: null,
   engine: null,
@@ -73,17 +84,6 @@ if (dom.restartScenarioBtn) {
   dom.restartScenarioBtn.hidden = true;
   dom.restartScenarioBtn.disabled = true;
 }
-
-const IMAGE_VIEWER_MIN_SCALE = 0.5;
-const IMAGE_VIEWER_MAX_SCALE = 4;
-const IMAGE_VIEWER_STEP = 0.2;
-const ACTIVE_CASE_DB_NAME = "ai-court-game";
-const ACTIVE_CASE_DB_VERSION = 1;
-const ACTIVE_CASE_STORE_NAME = "active_cases";
-const ACTIVE_CASE_STORAGE_KEY = "current";
-const VOICE_SETTING_STORAGE_KEY = "ai-court-game-voice-enabled";
-const VOICE_VOLUME_STORAGE_KEY = "ai-court-game-voice-volume";
-const DEFAULT_TTS_VOLUME = 80;
 let activeCaseAsyncToken = 0;
 
 function readVoiceSetting() {
