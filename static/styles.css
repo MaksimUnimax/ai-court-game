@@ -869,7 +869,7 @@ button:disabled {
   width: auto;
   height: auto;
   transform-origin: center center;
-  transition: transform 120ms ease;
+  transition: width 120ms ease, height 120ms ease;
   user-select: none;
   -webkit-user-drag: none;
   cursor: grab;

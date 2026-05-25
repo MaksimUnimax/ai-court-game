@@ -1747,10 +1747,40 @@ function renderImageViewer() {
   dom.imageViewerAlt.textContent = state.imageViewer.alt || "Изображение можно увеличить и внимательно рассмотреть.";
   dom.imageViewerImage.src = state.imageViewer.url;
   dom.imageViewerImage.alt = state.imageViewer.alt || state.imageViewer.title || "Иллюстрация";
-  dom.imageViewerImage.style.transform = `scale(${state.imageViewer.scale})`;
   dom.imageViewerScale.textContent = `${Math.round(state.imageViewer.scale * 100)}%`;
+  updateImageViewerImageSize();
   updateBodyScrollLock();
   updateImageViewerDragStateClass();
+}
+
+function updateImageViewerImageSize() {
+  if (!dom.imageViewerViewport || !dom.imageViewerImage || !state.imageViewer.open) {
+    return;
+  }
+  const naturalWidth = dom.imageViewerImage.naturalWidth || 0;
+  const naturalHeight = dom.imageViewerImage.naturalHeight || 0;
+  if (!naturalWidth || !naturalHeight) {
+    return;
+  }
+
+  const viewportWidth = Math.max(1, dom.imageViewerViewport.clientWidth || naturalWidth);
+  const viewportHeight = Math.max(1, dom.imageViewerViewport.clientHeight || naturalHeight);
+  const fitScale = Math.min(viewportWidth / naturalWidth, viewportHeight / naturalHeight, 1);
+  const baseWidth = naturalWidth * fitScale;
+  const baseHeight = naturalHeight * fitScale;
+  const displayScale = clampScale(state.imageViewer.scale);
+  const width = Math.max(1, Math.round(baseWidth * displayScale));
+  const height = Math.max(1, Math.round(baseHeight * displayScale));
+
+  dom.imageViewerImage.style.transform = "none";
+  dom.imageViewerImage.style.maxWidth = "none";
+  dom.imageViewerImage.style.maxHeight = "none";
+  dom.imageViewerImage.style.width = `${width}px`;
+  dom.imageViewerImage.style.height = `${height}px`;
+  if (displayScale > 1) {
+    dom.imageViewerViewport.scrollLeft = Math.max(0, dom.imageViewerViewport.scrollLeft);
+    dom.imageViewerViewport.scrollTop = Math.max(0, dom.imageViewerViewport.scrollTop);
+  }
 }
 
 function closeImageViewer() {
@@ -1764,7 +1794,11 @@ function closeImageViewer() {
   if (dom.imageViewerImage) {
     dom.imageViewerImage.removeAttribute("src");
     dom.imageViewerImage.alt = "";
-    dom.imageViewerImage.style.transform = "scale(1)";
+    dom.imageViewerImage.style.transform = "none";
+    dom.imageViewerImage.style.width = "";
+    dom.imageViewerImage.style.height = "";
+    dom.imageViewerImage.style.maxWidth = "";
+    dom.imageViewerImage.style.maxHeight = "";
   }
   if (dom.imageViewerViewport) {
     dom.imageViewerViewport.scrollLeft = 0;
@@ -1790,6 +1824,7 @@ function openImageViewerFromSource(source) {
       dom.imageViewerViewport.scrollLeft = 0;
       dom.imageViewerViewport.scrollTop = 0;
     }
+    updateImageViewerImageSize();
   });
   window.requestAnimationFrame(() => {
     if (dom.imageViewerCloseBtn) {
@@ -2969,6 +3004,10 @@ if (dom.imageViewerModal) {
 
 if (dom.imageViewerCloseBtn) {
   dom.imageViewerCloseBtn.addEventListener("click", closeImageViewer);
+}
+
+if (dom.imageViewerImage) {
+  dom.imageViewerImage.addEventListener("load", updateImageViewerImageSize);
 }
 
 if (dom.imageViewerZoomInBtn) {
