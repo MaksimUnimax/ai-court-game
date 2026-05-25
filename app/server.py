@@ -51,9 +51,6 @@ SUPPORTED_EFFECT_TYPES = {
     "show_note",
     "enable_verdict",
 }
-SUPPORTED_AUDIO_ASSET_TYPES = {
-    "dialogue_response",
-}
 SUPPORTED_VISUAL_ASSET_TYPES = {
     "participant_portrait",
     "scene",
@@ -72,13 +69,6 @@ SUPPORTED_PACKAGE_IMAGE_EXTENSIONS = {
     ".jpeg",
     ".webp",
     ".svg",
-}
-SUPPORTED_PACKAGE_AUDIO_EXTENSIONS = {
-    ".mp3",
-    ".wav",
-    ".ogg",
-    ".webm",
-    ".m4a",
 }
 
 
@@ -108,24 +98,10 @@ def is_supported_package_image(filename):
     return Path(filename.lower()).suffix in SUPPORTED_PACKAGE_IMAGE_EXTENSIONS
 
 
-def is_supported_package_audio(filename):
-    return Path(filename.lower()).suffix in SUPPORTED_PACKAGE_AUDIO_EXTENSIONS
-
-
 def guess_mime_type(filename):
     ext = Path(filename.lower()).suffix
     if ext == ".svg":
         return "image/svg+xml"
-    if ext == ".mp3":
-        return "audio/mpeg"
-    if ext == ".wav":
-        return "audio/wav"
-    if ext == ".ogg":
-        return "audio/ogg"
-    if ext == ".webm":
-        return "audio/webm"
-    if ext == ".m4a":
-        return "audio/mp4"
     return mimetypes.guess_type(filename)[0] or "application/octet-stream"
 
 
@@ -145,7 +121,6 @@ def normalize_scenario(scenario):
     normalized = deepcopy(scenario)
     normalized.setdefault("relationships", [])
     normalized.setdefault("visual_assets", [])
-    normalized.setdefault("audio_assets", [])
 
     for participant in normalized.get("participants", []):
         participant.setdefault("relationships", [])
@@ -300,34 +275,6 @@ def validate_optional_object_field(item, field_name, path, errors):
         errors.append(f"{path}.{field_name} must be an object")
 
 
-def validate_audio_asset(asset, participant_ids, action_ids, errors, path):
-    if not isinstance(asset, dict):
-        errors.append(f"{path} must be an object")
-        return
-
-    validate_required_fields(path, asset, ["id", "type", "target_type", "target_id", "file"], errors)
-
-    asset_type = asset.get("type")
-    if asset_type not in SUPPORTED_AUDIO_ASSET_TYPES:
-        errors.append(f"{path} uses unsupported audio asset type '{asset_type}'")
-
-    target_type = asset.get("target_type")
-    if target_type != "dialogue_action":
-        errors.append(f"{path} uses unsupported target_type '{target_type}'")
-
-    target_id = asset.get("target_id")
-    if target_id and target_id not in action_ids:
-        errors.append(f"{path} references unknown target_id '{target_id}'")
-
-    participant_id = asset.get("participant_id")
-    if participant_id and participant_id not in participant_ids:
-        errors.append(f"{path} references unknown participant_id '{participant_id}'")
-
-    file_name = asset.get("file")
-    if file_name and Path(file_name.lower()).suffix not in SUPPORTED_PACKAGE_AUDIO_EXTENSIONS:
-        errors.append(f"{path} uses unsupported audio file extension '{Path(file_name).suffix}'")
-
-
 def validate_visual_asset(asset, participant_ids, errors, path):
     if not isinstance(asset, dict):
         errors.append(f"{path} must be an object")
@@ -420,7 +367,6 @@ def import_case_package_from_zip_bytes(zip_bytes, archive_name="case-package.zip
     unsupported_files = []
     scenario_candidates = []
     image_entries = []
-    audio_entries = []
 
     for info in archive.infolist():
         if info.is_dir():
@@ -442,7 +388,7 @@ def import_case_package_from_zip_bytes(zip_bytes, archive_name="case-package.zip
         entries.append(record)
         if Path(normalized_path).name.lower() == "scenario.json":
             scenario_candidates.append(record)
-        elif not is_supported_package_image(normalized_path) and not is_supported_package_audio(normalized_path):
+        elif not is_supported_package_image(normalized_path):
             unsupported_files.append(normalized_path)
 
     if not scenario_candidates:
@@ -466,7 +412,7 @@ def import_case_package_from_zip_bytes(zip_bytes, archive_name="case-package.zip
     normalized_scenario = normalize_scenario(normalize_payload(scenario))
 
     for record in entries:
-        if not is_supported_package_image(record["path"]) and not is_supported_package_audio(record["path"]):
+        if not is_supported_package_image(record["path"]):
             continue
         if scenario_root and not (
             record["path"] == scenario_root or record["path"].startswith(f"{scenario_root}/")
@@ -484,11 +430,8 @@ def import_case_package_from_zip_bytes(zip_bytes, archive_name="case-package.zip
         }
         if is_supported_package_image(record["path"]):
             image_entries.append(media_entry)
-        else:
-            audio_entries.append(media_entry)
 
-    images_by_path, images_by_basename, duplicate_image_basenames = build_media_lookup_from_entries(image_entries)
-    audio_by_path, audio_by_basename, duplicate_audio_basenames = build_media_lookup_from_entries(audio_entries)
+    images_by_path, images_by_basename, duplicate_image_basenames = build_images_lookup_from_entries(image_entries)
 
     matched_asset_count = 0
     used_lookup_keys = set()
@@ -511,29 +454,6 @@ def import_case_package_from_zip_bytes(zip_bytes, archive_name="case-package.zip
         else:
             matched_asset_count += 1
 
-    matched_audio_count = 0
-    used_audio_lookup_keys = set()
-    missing_audio_assets = []
-    audio_assets = normalized_scenario.get("audio_assets", [])
-    audio_asset_count = len(audio_assets)
-    for asset in audio_assets:
-        file_name = asset.get("file")
-        if not file_name:
-            continue
-        lookup_path = normalize_package_path(file_name)
-        lookup_basename = Path(file_name).name.lower()
-        matched_url = None
-        if lookup_path and lookup_path.lower() in audio_by_path:
-            matched_url = audio_by_path[lookup_path.lower()]
-            used_audio_lookup_keys.add(lookup_path.lower())
-        elif lookup_basename in audio_by_basename:
-            matched_url = audio_by_basename[lookup_basename]
-            used_audio_lookup_keys.add(lookup_basename)
-        if not matched_url:
-            missing_audio_assets.append(asset.get("id") or file_name)
-        else:
-            matched_audio_count += 1
-
     extra_images = []
     for entry in image_entries:
         path_key = entry["path"].lower()
@@ -541,20 +461,9 @@ def import_case_package_from_zip_bytes(zip_bytes, archive_name="case-package.zip
         if path_key not in used_lookup_keys and basename_key not in used_lookup_keys:
             extra_images.append(entry["path"])
 
-    extra_audio = []
-    for entry in audio_entries:
-        path_key = entry["path"].lower()
-        basename_key = entry["basename"].lower()
-        if path_key not in used_audio_lookup_keys and basename_key not in used_audio_lookup_keys:
-            extra_audio.append(entry["path"])
-
     if duplicate_image_basenames:
         warnings.append(
             "В ZIP-архиве обнаружены повторяющиеся имена файлов изображений; для совпадения по basename будет использовано первое найденное изображение."
-        )
-    if duplicate_audio_basenames:
-        warnings.append(
-            "В ZIP-архиве обнаружены повторяющиеся имена аудиофайлов; для совпадения по basename будет использован первый найденный файл."
         )
     if unsupported_files:
         warnings.append(
@@ -566,27 +475,11 @@ def import_case_package_from_zip_bytes(zip_bytes, archive_name="case-package.zip
             + ", ".join(extra_images[:8])
             + ("…" if len(extra_images) > 8 else "")
         )
-    if extra_audio:
-        warnings.append(
-            "В ZIP-архиве есть аудиофайлы, не связанные с audio_assets: "
-            + ", ".join(extra_audio[:8])
-            + ("…" if len(extra_audio) > 8 else "")
-        )
-    if audio_asset_count and not audio_entries:
-        warnings.append("В сценарии есть audio_assets, но соответствующие аудиофайлы не найдены.")
-    if audio_entries and not audio_asset_count:
-        warnings.append("Загружены аудиофайлы, но в сценарии нет привязок audio_assets.")
     if missing_visual_assets:
         warnings.append(
             "Для visual_assets не найдены изображения: "
             + ", ".join(missing_visual_assets[:8])
             + ("…" if len(missing_visual_assets) > 8 else "")
-        )
-    if missing_audio_assets:
-        warnings.append(
-            "Для audio_assets не найдены аудиофайлы: "
-            + ", ".join(missing_audio_assets[:8])
-            + ("…" if len(missing_audio_assets) > 8 else "")
         )
 
     package_summary = {
@@ -598,11 +491,6 @@ def import_case_package_from_zip_bytes(zip_bytes, archive_name="case-package.zip
         "image_count": len(image_entries),
         "matched_image_count": matched_asset_count,
         "unmatched_image_count": max(0, len(image_entries) - len(used_lookup_keys)),
-        "audio_count": len(audio_entries),
-        "audio_asset_count": audio_asset_count,
-        "matched_audio_count": matched_audio_count,
-        "missing_audio_count": max(0, audio_asset_count - matched_audio_count),
-        "unmatched_audio_count": max(0, len(audio_entries) - len(used_audio_lookup_keys)),
         "warnings": warnings,
     }
 
@@ -612,7 +500,6 @@ def import_case_package_from_zip_bytes(zip_bytes, archive_name="case-package.zip
         "warnings": warnings,
         "scenario": normalized_scenario,
         "images": {"by_path": images_by_path, "by_basename": images_by_basename},
-        "audio": {"by_path": audio_by_path, "by_basename": audio_by_basename},
         "package_summary": package_summary,
         "validation": {"ok": not validation_errors, "errors": validation_errors},
     }
@@ -647,17 +534,8 @@ def validate_scenario(scenario):
             for index, asset in enumerate(scenario["visual_assets"]):
                 validate_visual_asset(asset, participant_ids, errors, f"visual_assets[{index}]")
 
-    if "audio_assets" in scenario:
-        if not isinstance(scenario["audio_assets"], list):
-            errors.append("'audio_assets' must be a list")
-        else:
-            collect_unique_ids(scenario["audio_assets"], "audio_assets", errors)
-            for index, asset in enumerate(scenario["audio_assets"]):
-                validate_audio_asset(asset, participant_ids, action_ids, errors, f"audio_assets[{index}]")
-
     for participant in scenario.get("participants", []):
         if isinstance(participant, dict):
-            validate_optional_object_field(participant, "voice_profile", f"participant '{participant.get('id', '?')}'", errors)
             validate_required_fields(
                 f"participant '{participant.get('id', '?')}'",
                 participant,
@@ -700,7 +578,6 @@ def validate_scenario(scenario):
     for action in scenario.get("dialogue_actions", []):
         if not isinstance(action, dict):
             continue
-        validate_optional_object_field(action, "voice_direction", f"dialogue action '{action.get('id', '?')}'", errors)
         validate_required_fields(
             f"dialogue action '{action.get('id', '?')}'",
             action,
@@ -824,7 +701,6 @@ class AppHandler(BaseHTTPRequestHandler):
             "warnings": result["warnings"],
             "scenario": result["scenario"],
             "images": result["images"],
-            "audio": result["audio"],
             "package_summary": package_summary,
             "validation": result["validation"],
         }
