@@ -761,3 +761,80 @@ Before delivering any scenario JSON, verify all of the following:
 ### Non-negotiable rule
 
 When creating scenario files for this project, follow the loader schema exactly. Do not rename fields for style, convenience, or readability. If the loader expects `response_text`, `inspection_text`, `cover`, `participant_portrait`, `scene`, or `object`, use those exact names.
+
+## Player-facing participant cards must not reveal deductions
+
+Participant cards are player-facing gameplay content. They must describe who the person is, how they are connected to the case, and what the player can fairly know at that point.
+
+Participant cards must not explain the detective conclusion for the player.
+
+### Forbidden player-facing participant-card hints
+
+Do not show direct deduction hints in participant cards, relationships, public descriptions, or visible participant metadata.
+
+Forbidden examples:
+
+- `Его заключение ломает версию обвинения.`
+- `Она главный подозреваемый.`
+- `Он доказывает, что обвиняемый не виновен.`
+- `Эта связь указывает на настоящего убийцу.`
+- `Это противоречие раскрывает способ убийства.`
+- `Этот участник даёт ключ к разгадке.`
+- any equivalent phrase that tells the player what conclusion to draw
+
+### What participant cards may show
+
+During normal gameplay, participant cards may show:
+
+- participant name
+- role
+- position
+- neutral relation to the case
+- public description
+- known social/professional links
+- neutral background details
+- dialogue button/status
+
+The text may contain facts, but it must not interpret those facts for the player.
+
+### Correct pattern
+
+Player may see:
+
+- `Исследовал рану Норина и следы на предполагаемом оружии.`
+- `Проверял соответствие камертона и травмы.`
+- `Даёт независимое экспертное заключение.`
+
+Player must not see:
+
+- `Его заключение ломает версию обвинения.`
+
+The player must infer that from the expert dialogue, evidence text, images, and final explanation.
+
+### Internal fields are allowed, but must stay hidden
+
+The scenario JSON may contain internal authoring fields that explain the role of a participant in the mystery, such as:
+
+- `hidden_truth`
+- `authoring_notes`
+- `fairness_map`
+- internal validation notes
+- solution notes
+
+These fields must not be displayed in the normal player-facing participant cards.
+
+### Where participant deduction explanations belong
+
+Explanations about why a participant matters to the solution belong in:
+
+- final solution
+- verdict explanation
+- authoring notes
+- debug/review mode
+- scenario validation reports
+
+They do not belong in the normal player-facing participant card.
+
+### Non-negotiable rule
+
+For detective gameplay, participant cards must introduce people, not solve them. If a visible participant-card sentence tells the player what conclusion to draw, remove it or move it to the final solution/debug authoring data.
