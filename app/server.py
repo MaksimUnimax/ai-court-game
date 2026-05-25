@@ -1,8 +1,14 @@
 import base64
+import hashlib
+import importlib.metadata
+import importlib.util
 import io
 import json
 import mimetypes
+import os
 import posixpath
+import tempfile
+import threading
 import zipfile
 from email import policy
 from email.parser import BytesParser
@@ -17,11 +23,22 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 STATIC_DIR = REPO_ROOT / "static"
 SCENARIO_DIR = REPO_ROOT / "scenarios"
 DEMO_SCENARIO_PATH = SCENARIO_DIR / "demo_case.json"
+RUNTIME_DIR = REPO_ROOT / ".runtime"
+TTS_CACHE_DIR = RUNTIME_DIR / "tts-cache"
+SILERO_VENV_PYTHON = RUNTIME_DIR / "silero-venv" / "bin" / "python"
 HOST = "0.0.0.0"
 PORT = 8000
 MAX_CASE_PACKAGE_BYTES = 50 * 1024 * 1024
 MAX_CASE_PACKAGE_UNCOMPRESSED_BYTES = 120 * 1024 * 1024
 MAX_CASE_PACKAGE_FILES = 120
+MAX_TTS_TEXT_LENGTH = 1800
+TTS_LANGUAGE = "ru"
+TTS_MODEL_NAME = "v5_ru"
+TTS_SAMPLE_RATE = 48000
+TTS_ALLOWED_ROLES = {"narrator", "participant", "verdict"}
+TTS_REQUIRED_MODULES = ("torch", "silero", "numpy", "scipy", "omegaconf")
+TTS_NARRATOR_SPEAKERS = ("kseniya", "xenia", "baya", "aidar", "eugene")
+TTS_VERDICT_SPEAKERS = ("xenia", "kseniya", "baya", "aidar", "eugene")
 
 REQUIRED_TOP_LEVEL_KEYS = {
     "metadata",
@@ -71,6 +88,31 @@ SUPPORTED_PACKAGE_IMAGE_EXTENSIONS = {
     ".svg",
 }
 
+_tts_model = None
+_tts_speakers = ()
+_tts_runtime_version = None
+_tts_model_lock = threading.Lock()
+
+
+class TTSError(Exception):
+    status = HTTPStatus.INTERNAL_SERVER_ERROR
+
+
+class TTSRequestError(TTSError):
+    status = HTTPStatus.BAD_REQUEST
+
+
+class TTSRuntimeUnavailable(TTSError):
+    status = HTTPStatus.SERVICE_UNAVAILABLE
+
+
+class TTSModelLoadError(TTSError):
+    status = HTTPStatus.SERVICE_UNAVAILABLE
+
+
+class TTSSynthesisError(TTSError):
+    status = HTTPStatus.INTERNAL_SERVER_ERROR
+
 
 def load_demo_scenario():
     return json.loads(DEMO_SCENARIO_PATH.read_text(encoding="utf-8"))
@@ -115,6 +157,197 @@ def normalize_payload(payload):
     if isinstance(payload, dict) and "scenario" in payload:
         return payload["scenario"]
     return payload
+
+
+def normalize_whitespace(value):
+    return " ".join(str(value or "").split())
+
+
+def ensure_runtime_directory(path):
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def is_tts_runtime_installed():
+    return all(importlib.util.find_spec(module_name) for module_name in TTS_REQUIRED_MODULES)
+
+
+def get_tts_runtime_error_message():
+    if not SILERO_VENV_PYTHON.exists():
+        return "Silero TTS runtime не установлен на сервере. Перезапустите сервер через .runtime/silero-venv."
+    return "Silero TTS runtime недоступен в текущем Python-процессе. Перезапустите сервер через .runtime/silero-venv."
+
+
+def validate_tts_payload(payload):
+    if not isinstance(payload, dict):
+        raise TTSRequestError("Неверный формат запроса на озвучку.")
+
+    text = payload.get("text", "")
+    if not isinstance(text, str):
+        raise TTSRequestError("Текст озвучки должен быть строкой.")
+
+    normalized_text = normalize_whitespace(text)
+    if not normalized_text:
+        raise TTSRequestError("Текст для озвучки не должен быть пустым.")
+    if len(normalized_text) > MAX_TTS_TEXT_LENGTH:
+        raise TTSRequestError(f"Текст для озвучки слишком длинный. Лимит: {MAX_TTS_TEXT_LENGTH} символов.")
+
+    voice_role = normalize_whitespace(payload.get("voice_role", "narrator")).lower() or "narrator"
+    if voice_role not in TTS_ALLOWED_ROLES:
+        raise TTSRequestError("Недопустимая роль озвучки. Разрешены narrator, participant и verdict.")
+
+    return {
+        "text": normalized_text,
+        "voice_role": voice_role,
+        "participant_id": normalize_whitespace(payload.get("participant_id", "")),
+        "dialogue_action_id": normalize_whitespace(payload.get("dialogue_action_id", "")),
+        "content_id": normalize_whitespace(payload.get("content_id", "")),
+        "voice_profile": payload.get("voice_profile") if isinstance(payload.get("voice_profile"), dict) else None,
+        "voice_direction": payload.get("voice_direction") if isinstance(payload.get("voice_direction"), dict) else None,
+    }
+
+
+def choose_preferred_speaker(available_speakers, preferred_names):
+    for speaker in preferred_names:
+        if speaker in available_speakers:
+            return speaker
+    return available_speakers[0] if available_speakers else None
+
+
+def extract_speaker_hint(available_speakers, *objects):
+    for item in objects:
+        if not isinstance(item, dict):
+            continue
+        for key in ("speaker", "preferred_speaker"):
+            hint = normalize_whitespace(item.get(key))
+            if hint and hint in available_speakers:
+                return hint
+    return None
+
+
+def select_tts_speaker(request_data, available_speakers):
+    if not available_speakers:
+        raise TTSModelLoadError("Silero не сообщил доступные голоса для русской модели.")
+
+    hinted_speaker = extract_speaker_hint(
+        available_speakers, request_data.get("voice_profile"), request_data.get("voice_direction")
+    )
+    if hinted_speaker:
+        return hinted_speaker
+
+    voice_role = request_data["voice_role"]
+    if voice_role == "narrator":
+        return choose_preferred_speaker(available_speakers, TTS_NARRATOR_SPEAKERS)
+    if voice_role == "verdict":
+        return choose_preferred_speaker(available_speakers, TTS_VERDICT_SPEAKERS)
+
+    ordered_speakers = [
+        speaker for speaker in dict.fromkeys(TTS_NARRATOR_SPEAKERS + tuple(available_speakers)) if speaker in available_speakers
+    ]
+    participant_id = request_data.get("participant_id") or request_data.get("dialogue_action_id") or request_data.get("content_id")
+    if not participant_id:
+        return choose_preferred_speaker(available_speakers, ordered_speakers)
+
+    digest = hashlib.sha256(participant_id.encode("utf-8")).hexdigest()
+    return ordered_speakers[int(digest, 16) % len(ordered_speakers)]
+
+
+def load_tts_runtime():
+    global _tts_model, _tts_speakers, _tts_runtime_version
+
+    if _tts_model is not None:
+        return _tts_model, _tts_speakers, _tts_runtime_version
+
+    with _tts_model_lock:
+        if _tts_model is not None:
+            return _tts_model, _tts_speakers, _tts_runtime_version
+        if not is_tts_runtime_installed():
+            raise TTSRuntimeUnavailable(get_tts_runtime_error_message())
+
+        try:
+            from silero import silero_tts
+        except Exception as error:
+            raise TTSRuntimeUnavailable(get_tts_runtime_error_message()) from error
+
+        try:
+            model, _ = silero_tts(language=TTS_LANGUAGE, speaker=TTS_MODEL_NAME)
+        except Exception as error:
+            raise TTSModelLoadError("Не удалось загрузить русскую модель Silero TTS.") from error
+
+        speakers = tuple(str(item).strip() for item in getattr(model, "speakers", []) if str(item).strip())
+        if not speakers:
+            raise TTSModelLoadError("Русская модель Silero TTS не вернула список доступных голосов.")
+
+        _tts_model = model
+        _tts_speakers = speakers
+        _tts_runtime_version = importlib.metadata.version("silero")
+        return _tts_model, _tts_speakers, _tts_runtime_version
+
+
+def build_tts_cache_path(request_data, speaker, runtime_version):
+    ensure_runtime_directory(TTS_CACHE_DIR)
+    cache_payload = {
+        "text": request_data["text"],
+        "voice_role": request_data["voice_role"],
+        "participant_id": request_data.get("participant_id", ""),
+        "dialogue_action_id": request_data.get("dialogue_action_id", ""),
+        "content_id": request_data.get("content_id", ""),
+        "speaker": speaker,
+        "sample_rate": TTS_SAMPLE_RATE,
+        "model_name": TTS_MODEL_NAME,
+        "runtime_version": runtime_version,
+    }
+    cache_key = hashlib.sha256(
+        json.dumps(cache_payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    ).hexdigest()
+    return TTS_CACHE_DIR / f"{cache_key}.wav"
+
+
+def synthesize_tts_audio(payload):
+    request_data = validate_tts_payload(payload)
+    model, speakers, runtime_version = load_tts_runtime()
+    speaker = select_tts_speaker(request_data, speakers)
+    cache_path = build_tts_cache_path(request_data, speaker, runtime_version)
+
+    if cache_path.exists() and cache_path.is_file() and cache_path.stat().st_size > 0:
+        return {
+            "audio": cache_path.read_bytes(),
+            "speaker": speaker,
+            "cached": True,
+            "cache_path": cache_path,
+        }
+
+    temp_file = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            prefix="tts-", suffix=".wav", dir=str(ensure_runtime_directory(TTS_CACHE_DIR)), delete=False
+        ) as temp_handle:
+            temp_file = Path(temp_handle.name)
+
+        model.save_wav(
+            text=request_data["text"],
+            speaker=speaker,
+            audio_path=str(temp_file),
+            sample_rate=TTS_SAMPLE_RATE,
+        )
+
+        if not temp_file.exists() or temp_file.stat().st_size <= 0:
+            raise TTSSynthesisError("Silero не вернул аудиофайл.")
+
+        temp_file.replace(cache_path)
+        return {
+            "audio": cache_path.read_bytes(),
+            "speaker": speaker,
+            "cached": False,
+            "cache_path": cache_path,
+        }
+    except TTSError:
+        raise
+    except Exception as error:
+        raise TTSSynthesisError("Не удалось сгенерировать озвучку.") from error
+    finally:
+        if temp_file and temp_file.exists():
+            temp_file.unlink(missing_ok=True)
 
 
 def normalize_scenario(scenario):
@@ -661,6 +894,9 @@ class AppHandler(BaseHTTPRequestHandler):
                 return
             self.send_json(HTTPStatus.OK, result)
             return
+        if parsed.path == "/api/tts/synthesize":
+            self.handle_tts_synthesize()
+            return
         self.send_json(HTTPStatus.NOT_FOUND, {"ok": False, "errors": ["Unknown endpoint"]})
 
     def log_message(self, format, *args):
@@ -705,6 +941,27 @@ class AppHandler(BaseHTTPRequestHandler):
             "validation": result["validation"],
         }
 
+    def handle_tts_synthesize(self):
+        try:
+            payload = self.read_json_body()
+            result = synthesize_tts_audio(payload)
+        except TTSError as error:
+            self.send_json(error.status, {"ok": False, "errors": [str(error)]})
+            return
+        except json.JSONDecodeError:
+            self.send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "errors": ["Не удалось разобрать JSON запроса."]})
+            return
+        except Exception:
+            self.send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"ok": False, "errors": ["Не удалось сгенерировать озвучку."]})
+            return
+
+        self.send_bytes(
+            HTTPStatus.OK,
+            result["audio"],
+            "audio/wav",
+            extra_headers={"X-TTS-Speaker": result["speaker"], "X-TTS-Cache": "hit" if result["cached"] else "miss"},
+        )
+
     def serve_static(self, relative_path):
         target = (STATIC_DIR / relative_path).resolve()
         if not str(target).startswith(str(STATIC_DIR.resolve())) or not target.exists() or not target.is_file():
@@ -723,6 +980,15 @@ class AppHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+    def send_bytes(self, status, payload, content_type, extra_headers=None):
+        self.send_response(status)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(payload)))
+        for key, value in (extra_headers or {}).items():
+            self.send_header(key, value)
+        self.end_headers()
+        self.wfile.write(payload)
 
 
 def run_server(host=HOST, port=PORT):

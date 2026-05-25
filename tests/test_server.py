@@ -1,8 +1,11 @@
 import base64
+import http.client
 import io
 import json
+import threading
 import unittest
 from copy import deepcopy
+from unittest import mock
 import zipfile
 
 from app import server
@@ -71,6 +74,54 @@ class ScenarioValidationTests(unittest.TestCase):
             archive.writestr("../evil.png", b"evil")
         with self.assertRaises(ValueError):
             server.import_case_package_from_zip_bytes(buffer.getvalue(), archive_name="evil.zip")
+
+
+class TtsValidationTests(unittest.TestCase):
+    def test_tts_rejects_empty_text(self):
+        with self.assertRaises(server.TTSRequestError):
+            server.validate_tts_payload({"text": "   "})
+
+    def test_tts_rejects_too_long_text(self):
+        with self.assertRaises(server.TTSRequestError):
+            server.validate_tts_payload({"text": "а" * (server.MAX_TTS_TEXT_LENGTH + 1)})
+
+    def test_tts_accepts_supported_voice_roles(self):
+        for voice_role in ("narrator", "participant", "verdict"):
+            payload = server.validate_tts_payload({"text": "Тестовая реплика", "voice_role": voice_role})
+            self.assertEqual(payload["voice_role"], voice_role)
+
+
+class TtsEndpointTests(unittest.TestCase):
+    def setUp(self):
+        self.httpd = server.ThreadingHTTPServer(("127.0.0.1", 0), server.AppHandler)
+        self.thread = threading.Thread(target=self.httpd.serve_forever, daemon=True)
+        self.thread.start()
+
+    def tearDown(self):
+        self.httpd.shutdown()
+        self.httpd.server_close()
+        self.thread.join(timeout=5)
+
+    def post_json(self, path, payload):
+        connection = http.client.HTTPConnection("127.0.0.1", self.httpd.server_address[1], timeout=5)
+        try:
+            body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+            connection.request("POST", path, body=body, headers={"Content-Type": "application/json"})
+            response = connection.getresponse()
+            data = response.read()
+            return response.status, response.getheaders(), json.loads(data.decode("utf-8"))
+        finally:
+            connection.close()
+
+    def test_tts_endpoint_fails_gracefully_when_runtime_unavailable(self):
+        with mock.patch.object(server, "is_tts_runtime_installed", return_value=False):
+            status, _headers, payload = self.post_json(
+                "/api/tts/synthesize",
+                {"text": "Суд заслушал описание дела.", "voice_role": "narrator"},
+            )
+        self.assertEqual(status, 503)
+        self.assertFalse(payload["ok"])
+        self.assertTrue(payload["errors"])
 
 
 if __name__ == "__main__":

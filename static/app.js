@@ -10,6 +10,16 @@ const state = {
   selectedParticipantId: null,
   selectedEvidenceId: null,
   dialogueHistoryByParticipant: new Map(),
+  tts: {
+    enabled: readVoiceSetting(),
+    statusMessage: "",
+    statusTone: "muted",
+    currentAudio: null,
+    currentObjectUrl: "",
+    abortController: null,
+    requestToken: 0,
+    isBusy: false,
+  },
   imageViewer: {
     open: false,
     assetId: null,
@@ -26,6 +36,9 @@ const dom = {
   startScenarioBtn: document.querySelector("#start-scenario-btn"),
   restartScenarioBtn: document.querySelector("#restart-scenario-btn"),
   deleteActiveCaseBtn: document.querySelector("#delete-active-case-btn"),
+  voiceToggleBtn: document.querySelector("#voice-toggle-btn"),
+  stopVoiceBtn: document.querySelector("#stop-voice-btn"),
+  ttsStatusPanel: document.querySelector("#tts-status-panel"),
   validationPanel: document.querySelector("#validation-panel"),
   activeCasePanel: document.querySelector("#active-case-status-panel"),
   caseIntroPanel: document.querySelector("#case-intro-panel"),
@@ -65,7 +78,25 @@ const ACTIVE_CASE_DB_NAME = "ai-court-game";
 const ACTIVE_CASE_DB_VERSION = 1;
 const ACTIVE_CASE_STORE_NAME = "active_cases";
 const ACTIVE_CASE_STORAGE_KEY = "current";
+const VOICE_SETTING_STORAGE_KEY = "ai-court-game-voice-enabled";
 let activeCaseAsyncToken = 0;
+
+function readVoiceSetting() {
+  try {
+    const savedValue = window.localStorage.getItem(VOICE_SETTING_STORAGE_KEY);
+    return savedValue === null ? false : savedValue === "true";
+  } catch (_error) {
+    return false;
+  }
+}
+
+function writeVoiceSetting(value) {
+  try {
+    window.localStorage.setItem(VOICE_SETTING_STORAGE_KEY, String(Boolean(value)));
+  } catch (_error) {
+    return;
+  }
+}
 
 function beginActiveCaseAsyncOperation() {
   activeCaseAsyncToken += 1;
@@ -74,6 +105,273 @@ function beginActiveCaseAsyncOperation() {
 
 function isActiveCaseAsyncOperationCurrent(token) {
   return token === activeCaseAsyncToken;
+}
+
+function normalizeTtsText(value) {
+  return String(value || "").replace(/\s+/g, " ").trim();
+}
+
+function setTtsStatus(message, tone = "muted") {
+  state.tts.statusMessage = message;
+  state.tts.statusTone = tone;
+  renderTtsControls();
+}
+
+function revokeCurrentTtsObjectUrl() {
+  if (!state.tts.currentObjectUrl) {
+    return;
+  }
+  URL.revokeObjectURL(state.tts.currentObjectUrl);
+  state.tts.currentObjectUrl = "";
+}
+
+function stopCurrentTts(options = {}) {
+  const { invalidatePending = true, nextStatusMessage = null, nextStatusTone = null } = options;
+  if (invalidatePending) {
+    state.tts.requestToken += 1;
+  }
+  if (state.tts.abortController) {
+    state.tts.abortController.abort();
+    state.tts.abortController = null;
+  }
+  if (state.tts.currentAudio) {
+    state.tts.currentAudio.pause();
+    state.tts.currentAudio.removeAttribute("src");
+    state.tts.currentAudio.load();
+    state.tts.currentAudio = null;
+  }
+  revokeCurrentTtsObjectUrl();
+  state.tts.isBusy = false;
+  if (nextStatusMessage !== null) {
+    state.tts.statusMessage = nextStatusMessage;
+  }
+  if (nextStatusTone !== null) {
+    state.tts.statusTone = nextStatusTone;
+  }
+  renderTtsControls();
+}
+
+function renderTtsControls() {
+  if (dom.voiceToggleBtn) {
+    dom.voiceToggleBtn.textContent = state.tts.enabled ? "Голос: включён" : "Голос: выключен";
+  }
+  if (dom.stopVoiceBtn) {
+    dom.stopVoiceBtn.disabled = !state.tts.isBusy && !state.tts.currentAudio;
+  }
+  if (dom.ttsStatusPanel) {
+    const toneClass =
+      state.tts.statusTone === "error"
+        ? "status-error"
+        : state.tts.statusTone === "ok"
+          ? "status-ok"
+          : state.tts.statusTone === "pending"
+            ? "status-pending"
+            : "";
+    dom.ttsStatusPanel.className = `status-panel tts-status-panel ${toneClass}`.trim();
+    dom.ttsStatusPanel.textContent =
+      state.tts.statusMessage || (state.tts.enabled ? "Озвучка готова" : "Голос выключен");
+  }
+}
+
+function toggleVoiceSetting() {
+  state.tts.enabled = !state.tts.enabled;
+  writeVoiceSetting(state.tts.enabled);
+  if (!state.tts.enabled) {
+    stopCurrentTts({ nextStatusMessage: "Голос выключен", nextStatusTone: "muted" });
+    return;
+  }
+  setTtsStatus("Озвучка готова", "ok");
+}
+
+async function requestTtsPlayback(payload, options = {}) {
+  const { manual = false } = options;
+  const text = normalizeTtsText(payload?.text);
+  if (!text) {
+    setTtsStatus("Не удалось сгенерировать озвучку", "error");
+    return;
+  }
+  if (!manual && !state.tts.enabled) {
+    setTtsStatus("Голос выключен", "muted");
+    return;
+  }
+
+  const requestToken = state.tts.requestToken + 1;
+  state.tts.requestToken = requestToken;
+  stopCurrentTts({ invalidatePending: false });
+  state.tts.isBusy = true;
+  setTtsStatus("Генерирую озвучку...", "pending");
+
+  const abortController = new AbortController();
+  state.tts.abortController = abortController;
+
+  try {
+    const response = await fetch("/api/tts/synthesize", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...payload, text }),
+      signal: abortController.signal,
+    });
+    if (requestToken !== state.tts.requestToken) {
+      return;
+    }
+
+    if (!response.ok) {
+      const errorPayload = await response.json().catch(() => ({}));
+      throw new Error((errorPayload.errors || ["Не удалось сгенерировать озвучку"]).join(". "));
+    }
+
+    const audioBlob = await response.blob();
+    if (requestToken !== state.tts.requestToken) {
+      return;
+    }
+
+    const objectUrl = URL.createObjectURL(audioBlob);
+    const audio = new Audio(objectUrl);
+    state.tts.currentObjectUrl = objectUrl;
+    state.tts.currentAudio = audio;
+    state.tts.abortController = null;
+
+    const finalizePlayback = () => {
+      if (requestToken !== state.tts.requestToken) {
+        return;
+      }
+      state.tts.currentAudio = null;
+      state.tts.isBusy = false;
+      revokeCurrentTtsObjectUrl();
+      state.tts.statusMessage = state.tts.enabled ? "Озвучка готова" : "Голос выключен";
+      state.tts.statusTone = state.tts.enabled ? "ok" : "muted";
+      renderTtsControls();
+    };
+
+    audio.addEventListener("ended", finalizePlayback, { once: true });
+    audio.addEventListener(
+      "error",
+      () => {
+        finalizePlayback();
+        setTtsStatus("Не удалось сгенерировать озвучку", "error");
+      },
+      { once: true }
+    );
+
+    await audio.play();
+    state.tts.isBusy = true;
+    setTtsStatus("Озвучка готова", "ok");
+  } catch (error) {
+    if (requestToken !== state.tts.requestToken) {
+      return;
+    }
+    if (error?.name === "AbortError") {
+      state.tts.isBusy = false;
+      renderTtsControls();
+      return;
+    }
+    stopCurrentTts({
+      invalidatePending: false,
+      nextStatusMessage: error.message || "Не удалось сгенерировать озвучку",
+      nextStatusTone: "error",
+    });
+  }
+}
+
+function joinNarrationParts(parts) {
+  return parts.map(normalizeTtsText).filter(Boolean).join(" ");
+}
+
+function buildCaseIntroTtsText() {
+  if (!state.scenario) {
+    return "";
+  }
+  const intro = state.scenario.case_intro || {};
+  const metadata = state.scenario.metadata || {};
+  return joinNarrationParts([
+    metadata.title,
+    metadata.case_type,
+    intro.title,
+    intro.summary,
+    intro.court_context,
+    intro.judge_goal,
+    intro.judge_briefing,
+  ]);
+}
+
+function buildVerdictTtsText(verdictId) {
+  if (!state.scenario || !state.engine?.finished) {
+    return "";
+  }
+  const verdict = state.scenario.verdicts.find((item) => item.id === verdictId);
+  const solution = state.scenario.solution || {};
+  if (!verdict) {
+    return "";
+  }
+  return joinNarrationParts([
+    "Вердикт суда.",
+    verdict.label,
+    solution.explanation,
+  ]);
+}
+
+function buildFinalExplanationTtsText() {
+  if (!state.scenario || !state.engine?.finished) {
+    return "";
+  }
+  const solution = state.scenario.solution || {};
+  const expectedVerdictLabel =
+    state.scenario.verdicts.find((item) => item.id === solution.correct_verdict_id)?.label || solution.correct_verdict_id;
+  return joinNarrationParts([
+    state.engine.selectedVerdict === solution.correct_verdict_id ? "Правильный вердикт." : "Неправильный вердикт.",
+    expectedVerdictLabel ? `Ожидаемый вердикт: ${expectedVerdictLabel}.` : "",
+    solution.explanation,
+    ...(Array.isArray(solution.key_points) ? solution.key_points : []),
+  ]);
+}
+
+function playCaseIntroNarration(options = {}) {
+  return requestTtsPlayback(
+    {
+      text: buildCaseIntroTtsText(),
+      voice_role: "narrator",
+      content_id: "case_intro",
+    },
+    options
+  );
+}
+
+function playDialogueNarration(actionId, options = {}) {
+  const action = state.scenario?.dialogue_actions?.find((item) => item.id === actionId);
+  if (!action) {
+    return Promise.resolve();
+  }
+  return requestTtsPlayback(
+    {
+      text: action.response_text,
+      voice_role: "participant",
+      participant_id: action.participant_id,
+      dialogue_action_id: action.id,
+    },
+    options
+  );
+}
+
+function playVerdictNarration(verdictId, options = {}) {
+  return requestTtsPlayback(
+    {
+      text: buildVerdictTtsText(verdictId),
+      voice_role: "verdict",
+      content_id: `verdict:${verdictId}`,
+    },
+    options
+  );
+}
+
+function playFinalExplanationNarration(options = {}) {
+  return requestTtsPlayback(
+    {
+      text: buildFinalExplanationTtsText(),
+      voice_role: "verdict",
+      content_id: "final_explanation",
+    },
+    options
+  );
 }
 
 const CONDITION_HANDLERS = {
@@ -135,6 +433,7 @@ function createEngine(initialState) {
 }
 
 function createEmptyGameState() {
+  stopCurrentTts({ nextStatusMessage: state.tts.enabled ? "Озвучка готова" : "Голос выключен", nextStatusTone: state.tts.enabled ? "ok" : "muted" });
   state.scenario = null;
   state.engine = null;
   state.selectedParticipantId = null;
@@ -456,6 +755,7 @@ function updateLoadedPackageButtons() {
 }
 
 function resetCurrentScenarioState() {
+  stopCurrentTts({ nextStatusMessage: state.tts.enabled ? "Озвучка готова" : "Голос выключен", nextStatusTone: state.tts.enabled ? "ok" : "muted" });
   closeImageViewer();
   state.selectedParticipantId = null;
   state.selectedEvidenceId = null;
@@ -530,6 +830,7 @@ function renderValidation(message, isError = false) {
 }
 
 function clearLoadedPackage() {
+  stopCurrentTts({ nextStatusMessage: state.tts.enabled ? "Озвучка готова" : "Голос выключен", nextStatusTone: state.tts.enabled ? "ok" : "muted" });
   closeImageViewer();
   if (state.loadedImageRegistry) {
     revokeImageRegistry(state.loadedImageRegistry);
@@ -552,6 +853,7 @@ function clearActiveCaseState() {
 }
 
 function clearCurrentRuntimeState() {
+  stopCurrentTts({ nextStatusMessage: state.tts.enabled ? "Озвучка готова" : "Голос выключен", nextStatusTone: state.tts.enabled ? "ok" : "muted" });
   createEmptyGameState();
   state.selectedParticipantId = null;
   state.selectedEvidenceId = null;
@@ -1184,6 +1486,9 @@ function renderCaseIntro() {
     <p class="muted">${escapeHtml(metadata.case_type)} · ${escapeHtml(metadata.difficulty)}</p>
     <p>${escapeHtml(intro.summary)}</p>
     <p><strong>Брифинг судьи:</strong> ${escapeHtml(intro.judge_briefing)}</p>
+    <div class="tts-action-row">
+      <button type="button" class="tts-action-button" data-tts-case-intro>Прослушать описание дела</button>
+    </div>
   `;
 }
 
@@ -1233,6 +1538,15 @@ function renderParticipantDialogue(participant, isActive) {
               <p class="dialogue-question">${escapeHtml(item.question)}</p>
               <p class="dialogue-label">Ответ</p>
               <p class="dialogue-answer">${escapeHtml(item.answer)}</p>
+              <div class="tts-action-row dialogue-history-audio">
+                <button
+                  type="button"
+                  class="tts-action-button dialogue-audio-button"
+                  data-tts-dialogue-action-id="${escapeHtml(item.actionId)}"
+                >
+                  Прослушать реплику
+                </button>
+              </div>
               ${
                 item.notes && item.notes.length
                   ? `
@@ -1471,6 +1785,17 @@ function renderVerdicts() {
           }>
             ${escapeHtml(chosen ? "Выбран" : "Выбрать вердикт")}
           </button>
+          ${
+            chosen
+              ? `
+                <div class="tts-action-row">
+                  <button type="button" class="tts-action-button" data-tts-verdict-id="${escapeHtml(verdict.id)}">
+                    Прослушать вердикт
+                  </button>
+                </div>
+              `
+              : ""
+          }
         </div>
       `;
     })
@@ -1495,6 +1820,9 @@ function renderFinalExplanation() {
     <ul class="inline-list">
       ${solution.key_points.map((point) => `<li>${escapeHtml(point)}</li>`).join("")}
     </ul>
+    <div class="tts-action-row">
+      <button type="button" class="tts-action-button" data-tts-final-explanation>Прослушать объяснение</button>
+    </div>
   `;
 }
 
@@ -1531,6 +1859,7 @@ function startScenarioFromResponse(data) {
   renderAll();
   renderActiveCaseStatus();
   void queueActiveCasePersistence();
+  void playCaseIntroNarration({ manual: false });
 }
 
 async function restartScenarioFromLoadedPackage() {
@@ -1543,6 +1872,7 @@ async function restartScenarioFromLoadedPackage() {
   if (!confirmed) {
     return;
   }
+  stopCurrentTts({ nextStatusMessage: state.tts.enabled ? "Озвучка готова" : "Голос выключен", nextStatusTone: state.tts.enabled ? "ok" : "muted" });
   const operationToken = beginActiveCaseAsyncOperation();
   try {
     const data = await postJson("/api/start-scenario", state.loadedScenario);
@@ -1593,6 +1923,7 @@ function handleDialogueClick(actionId) {
     };
   }
   void queueActiveCasePersistence();
+  void playDialogueNarration(action.id, { manual: false });
 }
 
 function handleEvidenceClick(evidenceId) {
@@ -1640,6 +1971,7 @@ function handleVerdictClick(verdictId) {
     };
   }
   void queueActiveCasePersistence();
+  void playVerdictNarration(verdict.id, { manual: false });
 }
 
 dom.loadDemoBtn.addEventListener("click", async () => {
@@ -1736,6 +2068,19 @@ dom.startScenarioBtn.addEventListener("click", async () => {
     }
   }
 });
+
+if (dom.voiceToggleBtn) {
+  dom.voiceToggleBtn.addEventListener("click", toggleVoiceSetting);
+}
+
+if (dom.stopVoiceBtn) {
+  dom.stopVoiceBtn.addEventListener("click", () => {
+    stopCurrentTts({
+      nextStatusMessage: state.tts.enabled ? "Озвучка готова" : "Голос выключен",
+      nextStatusTone: state.tts.enabled ? "ok" : "muted",
+    });
+  });
+}
 
 if (dom.restartScenarioBtn) {
   dom.restartScenarioBtn.addEventListener("click", restartScenarioFromLoadedPackage);
@@ -1840,6 +2185,24 @@ document.addEventListener("click", (event) => {
     openImageViewer(visualAssetTrigger.getAttribute("data-visual-asset-id"));
   }
 
+  if (targetElement?.closest("[data-tts-case-intro]") && state.scenario && state.engine) {
+    void playCaseIntroNarration({ manual: true });
+  }
+
+  const ttsDialogueActionId = targetElement?.getAttribute("data-tts-dialogue-action-id");
+  if (ttsDialogueActionId && state.scenario && state.engine) {
+    void playDialogueNarration(ttsDialogueActionId, { manual: true });
+  }
+
+  const ttsVerdictId = targetElement?.getAttribute("data-tts-verdict-id");
+  if (ttsVerdictId && state.scenario && state.engine?.finished) {
+    void playVerdictNarration(ttsVerdictId, { manual: true });
+  }
+
+  if (targetElement?.closest("[data-tts-final-explanation]") && state.scenario && state.engine?.finished) {
+    void playFinalExplanationNarration({ manual: true });
+  }
+
   const participantId = targetElement?.getAttribute("data-participant-id");
   if (participantId) {
     state.selectedParticipantId = participantId;
@@ -1882,4 +2245,5 @@ async function bootstrapActiveCaseRestore() {
 
 renderActiveCaseStatus();
 updateLoadedPackageButtons();
+renderTtsControls();
 void bootstrapActiveCaseRestore();

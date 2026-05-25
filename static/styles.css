@@ -172,6 +172,13 @@ h1 {
   margin-top: 14px;
 }
 
+.voice-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 14px;
+}
+
 button {
   cursor: pointer;
   padding: 10px 16px;
@@ -201,6 +208,16 @@ button:disabled {
   box-shadow: 0 10px 20px rgba(47, 85, 48, 0.22);
 }
 
+#voice-toggle-btn {
+  background: linear-gradient(180deg, #355f8c, #1f3e5f);
+  box-shadow: 0 10px 20px rgba(31, 62, 95, 0.22);
+}
+
+#stop-voice-btn {
+  background: linear-gradient(180deg, #7d5b2f, #5b3f1e);
+  box-shadow: 0 10px 20px rgba(91, 63, 30, 0.22);
+}
+
 .status-panel,
 .detail-panel,
 .empty-state,
@@ -227,6 +244,15 @@ button:disabled {
 .status-ok {
   color: #214a2b;
   background: rgba(233, 248, 234, 0.88);
+}
+
+.status-pending {
+  color: #5f4519;
+  background: rgba(255, 244, 221, 0.92);
+}
+
+.tts-status-panel {
+  min-height: 56px;
 }
 
 .status-warnings {
@@ -471,6 +497,20 @@ button:disabled {
 .dialogue-audio-button {
   margin-top: 0;
   padding-inline: 14px;
+}
+
+.tts-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.tts-action-button {
+  margin-top: 0;
+  padding-inline: 14px;
+  background: linear-gradient(180deg, #355f8c, #1f3e5f);
+  box-shadow: 0 10px 20px rgba(31, 62, 95, 0.2);
 }
 
 .dialogue-label {
