@@ -1403,11 +1403,98 @@ function getVisualAssetKeywords(asset) {
 function isCaseCoverAsset(asset) {
   const keywords = getVisualAssetKeywords(asset);
   return (
-    keywords.includes("case") && keywords.includes("cover") ||
     keywords.includes("cover") ||
+    (keywords.includes("case") && keywords.includes("cover")) ||
     keywords.includes("обложка") ||
     keywords.includes("облож")
   );
+}
+
+function isAssetLinkedToParticipant(asset) {
+  if (!asset || !Array.isArray(state.scenario?.participants)) {
+    return false;
+  }
+  return state.scenario.participants.some(
+    (participant) =>
+      participant &&
+      typeof participant === "object" &&
+      (participant.visual_asset_id === asset.id ||
+        participant.image_id === asset.id ||
+        (participant.visual_asset_id && normalizeLookupPath(participant.visual_asset_id) === normalizeLookupPath(asset.file || "")) ||
+        (participant.image_id && normalizeLookupPath(participant.image_id) === normalizeLookupPath(asset.file || "")))
+  );
+}
+
+function isParticipantPortraitAsset(asset) {
+  if (!asset || isCaseCoverAsset(asset)) {
+    return false;
+  }
+  const keywords = getVisualAssetKeywords(asset);
+  const isPortraitMarker =
+    keywords.includes("participant") ||
+    keywords.includes("portrait") ||
+    keywords.includes("participant_portrait") ||
+    keywords.includes("participantcard") ||
+    keywords.includes("participant_card");
+  return (
+    isPortraitMarker ||
+    asset.participant_id ||
+    asset.target_type === "participant" ||
+    Boolean(asset.target_id && asset.target_type === "participant") ||
+    isAssetLinkedToParticipant(asset)
+  );
+}
+
+function isCaseIllustrationAsset(asset) {
+  if (!asset || isCaseCoverAsset(asset) || isParticipantPortraitAsset(asset)) {
+    return false;
+  }
+  const url = getVisualAssetImageUrl(asset);
+  if (!url) {
+    return false;
+  }
+  const keywords = getVisualAssetKeywords(asset);
+  const hasCaseIllustrationMarker = keywords.some((keyword) =>
+    [
+      "scene",
+      "evidence",
+      "object",
+      "location",
+      "case_scene",
+      "crime_scene",
+      "dispute_object",
+      "clue_visual",
+      "deduction_visual",
+      "illustration",
+      "case_illustration",
+      "visual",
+    ].includes(keyword)
+  );
+  return hasCaseIllustrationMarker || (!asset.target_type && !asset.participant_id);
+}
+
+function getCaseIllustrationLabel(asset) {
+  const keywords = getVisualAssetKeywords(asset);
+  if (keywords.includes("evidence")) {
+    return "Доказательство";
+  }
+  if (keywords.includes("location")) {
+    return "Место";
+  }
+  if (keywords.includes("object") || keywords.includes("dispute_object")) {
+    return "Объект";
+  }
+  if (
+    keywords.includes("scene") ||
+    keywords.includes("case_scene") ||
+    keywords.includes("crime_scene")
+  ) {
+    return "Сцена";
+  }
+  if (keywords.includes("clue_visual") || keywords.includes("deduction_visual")) {
+    return "Иллюстрация дела";
+  }
+  return "Иллюстрация дела";
 }
 
 function getVisualAssetImageUrl(asset) {
@@ -1500,26 +1587,33 @@ function getCaseCoverSource() {
 
 function getVisualAssetForParticipant(participant) {
   const assets = getVisualAssets();
-  const byVisualAssetId =
-    participant.visual_asset_id || participant.image_id
-      ? assets.find((asset) => asset.id === participant.visual_asset_id || asset.id === participant.image_id)
-      : null;
-  const byTarget = assets.find(
-    (asset) => asset.target_type === "participant" && asset.target_id === participant.id
+  const candidates = [];
+  if (participant.visual_asset_id || participant.image_id) {
+    candidates.push(
+      ...assets.filter(
+        (asset) => asset.id === participant.visual_asset_id || asset.id === participant.image_id
+      )
+    );
+  }
+  candidates.push(
+    ...assets.filter(
+      (asset) => asset.target_type === "participant" && asset.target_id === participant.id
+    )
   );
-  const byPlacement = assets.find(
-    (asset) =>
-      asset.placement === "participant_card" &&
-      asset.target_type === "participant" &&
-      asset.target_id === participant.id
+  candidates.push(
+    ...assets.filter(
+      (asset) =>
+        asset.placement === "participant_card" &&
+        asset.target_type === "participant" &&
+        asset.target_id === participant.id
+    )
   );
-  return byTarget || byPlacement || byVisualAssetId || null;
+  const match = candidates.find((asset) => !isCaseCoverAsset(asset)) || null;
+  return match;
 }
 
 function getVisualAssetsForDisplay() {
-  return getVisualAssets().filter((asset) =>
-    ["participant_portrait", "scene", "object"].includes(asset.type) && !isCaseCoverAsset(asset)
-  );
+  return getVisualAssets().filter(isCaseIllustrationAsset);
 }
 
 function clampScale(value) {
@@ -2059,7 +2153,7 @@ function renderVisualAssets() {
   const assets = getVisualAssetsForDisplay();
   if (!assets.length) {
     dom.visualAssetsPanel.className = "visual-assets-grid empty-state";
-    dom.visualAssetsPanel.textContent = "Иллюстрации дела появятся после загрузки пакета дела.";
+    dom.visualAssetsPanel.textContent = "Иллюстрации дела не заданы.";
     return;
   }
 
@@ -2067,17 +2161,12 @@ function renderVisualAssets() {
   dom.visualAssetsPanel.innerHTML = assets
     .map((asset) => {
       const title = escapeHtml(asset.title || asset.alt || "Иллюстрация дела");
-      const placementLabel =
-        asset.type === "scene"
-          ? "Сцена"
-          : asset.type === "object"
-            ? "Объект"
-            : "Обложка дела";
+      const placementLabel = getCaseIllustrationLabel(asset);
       return `
         <article class="visual-asset-card">
           ${renderAssetMedia(asset)}
           <div>
-            <p class="participant-detail-label">${placementLabel}</p>
+            <p class="participant-detail-label">${escapeHtml(placementLabel)}</p>
             <h3>${title}</h3>
           </div>
         </article>
