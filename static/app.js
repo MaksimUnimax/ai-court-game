@@ -894,27 +894,27 @@ function renderActiveCaseStatus() {
 
   const record = state.activeCaseRecord;
   const sourceType = record?.sourceType || state.loadedScenarioMeta?.sourceType || "";
-  const hasRecord = Boolean(record);
+  const hasCase = Boolean(record || state.loadedScenario || state.loadedScenarioMeta);
+  const coverSource = getCaseCoverSource();
   const gameplayStatus = state.engine
     ? state.engine.finished
       ? "Сценарий завершён"
       : "Сценарий запущен"
-    : hasRecord
+    : hasCase
       ? "Пакет сохранён, сценарий можно запустить"
       : "Активное дело не сохранено";
 
-  const statusLine = state.activeCaseError
-    ? `<p><strong>Статус:</strong> ${escapeHtml(state.activeCaseError)}</p>`
-    : state.activeCaseNotice
-      ? `<p><strong>Статус:</strong> ${escapeHtml(state.activeCaseNotice)}</p>`
-      : `<p><strong>Статус:</strong> ${escapeHtml(gameplayStatus)}</p>`;
+  const statusText = state.activeCaseError
+    ? state.activeCaseError
+    : state.activeCaseNotice || gameplayStatus;
 
-  if (!hasRecord && !state.activeCaseError) {
-    dom.activeCasePanel.className = "status-panel empty-state";
+  if (!hasCase && !state.activeCaseError) {
+    dom.activeCasePanel.className = "case-cover-panel empty-state";
     dom.activeCasePanel.innerHTML = `
-      <p><strong>Активное дело:</strong> не сохранено в памяти браузера.</p>
-      <p>Загрузите ZIP-пакет, JSON + изображения или демо-сценарий, чтобы создать локальное сохранение.</p>
-      ${statusLine}
+      ${renderCaseCoverMarkup(coverSource)}
+      <div class="case-cover-meta">
+        <p><strong>Статус:</strong> ${escapeHtml(statusText)}</p>
+      </div>
     `;
     if (dom.deleteActiveCaseBtn) {
       dom.deleteActiveCaseBtn.disabled = true;
@@ -934,18 +934,19 @@ function renderActiveCaseStatus() {
         ? "сохранён с текущим прохождением"
         : "сохранён без запущенного сценария";
 
-  dom.activeCasePanel.className = state.activeCaseError ? "status-panel status-error" : "status-panel status-ok";
+  dom.activeCasePanel.className = state.activeCaseError ? "case-cover-panel status-error" : "case-cover-panel";
   dom.activeCasePanel.innerHTML = `
-    <p><strong>Активное дело:</strong> ${escapeHtml(record?.title || state.loadedScenarioMeta?.title || "Без названия")}</p>
-    <p><strong>Источник:</strong> ${escapeHtml(getSourceTypeLabel(sourceType))}</p>
-    <p><strong>Статус пакета:</strong> ${escapeHtml(packageStatus)}</p>
-    <p><strong>Иллюстраций:</strong> ${escapeHtml(String(imageCount))}</p>
-    <p><strong>Сохранено:</strong> ${escapeHtml(savedAt)}</p>
-    ${statusLine}
-    <p class="muted">Активное дело сохраняется локально в браузере. Серверного хранения нет.</p>
+    ${renderCaseCoverMarkup(coverSource)}
+    <div class="case-cover-meta">
+      <p><strong>Активное дело:</strong> ${escapeHtml(record?.title || state.loadedScenarioMeta?.title || "Без названия")}</p>
+      <p><strong>Источник:</strong> ${escapeHtml(getSourceTypeLabel(sourceType))}</p>
+      <p><strong>Иллюстраций:</strong> ${escapeHtml(String(imageCount))}</p>
+      <p><strong>Сохранено:</strong> ${escapeHtml(savedAt)}</p>
+      <p><strong>Статус:</strong> ${escapeHtml(statusText)}</p>
+    </div>
   `;
   if (dom.deleteActiveCaseBtn) {
-    dom.deleteActiveCaseBtn.disabled = false;
+    dom.deleteActiveCaseBtn.disabled = !hasCase;
   }
 }
 
@@ -1239,8 +1240,11 @@ async function importScenarioLibraryZip(file) {
 }
 
 function renderValidation(message, isError = false) {
-  dom.validationPanel.className = `status-panel ${isError ? "status-error" : "status-ok"}`;
-  dom.validationPanel.innerHTML = escapeStatusHtml(message);
+  dom.validationPanel.className = `status-panel package-details-panel ${isError ? "status-error" : "status-ok"}`;
+  if (typeof dom.validationPanel.open === "boolean") {
+    dom.validationPanel.open = false;
+  }
+  dom.validationPanel.innerHTML = `<summary>${escapeHtml(message)}</summary>`;
 }
 
 function clearLoadedPackage() {
@@ -1389,6 +1393,23 @@ function getVisualAssets() {
     : [];
 }
 
+function getVisualAssetKeywords(asset) {
+  return [asset?.id, asset?.role, asset?.placement, asset?.type]
+    .filter(Boolean)
+    .flatMap((value) => String(value).toLowerCase().split(/[^a-z0-9а-яё]+/u))
+    .filter(Boolean);
+}
+
+function isCaseCoverAsset(asset) {
+  const keywords = getVisualAssetKeywords(asset);
+  return (
+    keywords.includes("case") && keywords.includes("cover") ||
+    keywords.includes("cover") ||
+    keywords.includes("обложка") ||
+    keywords.includes("облож")
+  );
+}
+
 function getVisualAssetImageUrl(asset) {
   const registry = state.loadedImageRegistry;
   if (!registry || !asset || !asset.file) {
@@ -1397,6 +1418,84 @@ function getVisualAssetImageUrl(asset) {
   const pathKey = normalizeLookupPath(asset.file);
   const basenameKey = basenameFromPath(asset.file);
   return registry.byPath.get(pathKey) || registry.byBasename.get(basenameKey) || null;
+}
+
+function getFirstRegistryImageSource() {
+  const registry = state.loadedImageRegistry;
+  if (!registry) {
+    return null;
+  }
+  for (const [path, url] of registry.byPath.entries()) {
+    if (url) {
+      return {
+        url,
+        label: basenameFromPath(path) || path,
+      };
+    }
+  }
+  for (const [basename, url] of registry.byBasename.entries()) {
+    if (url) {
+      return {
+        url,
+        label: basename,
+      };
+    }
+  }
+  return null;
+}
+
+function getCaseCoverSource() {
+  const title =
+    state.loadedScenarioMeta?.title ||
+    state.loadedScenario?.metadata?.title ||
+    state.activeCaseRecord?.title ||
+    "Обложка дела";
+  const assets = getVisualAssets();
+  const explicitCoverAssets = assets.filter(isCaseCoverAsset);
+  const explicitCoverAsset = explicitCoverAssets.find((asset) => Boolean(getVisualAssetImageUrl(asset)));
+  if (explicitCoverAsset) {
+    return {
+      kind: "asset",
+      assetId: explicitCoverAsset.id,
+      url: getVisualAssetImageUrl(explicitCoverAsset),
+      title,
+      alt: explicitCoverAsset.alt || explicitCoverAsset.title || title,
+      label: "Обложка дела",
+      fallback: false,
+    };
+  }
+
+  const fallbackAsset = assets.find((asset) => Boolean(getVisualAssetImageUrl(asset)));
+  if (fallbackAsset) {
+    return {
+      kind: "asset",
+      assetId: fallbackAsset.id,
+      url: getVisualAssetImageUrl(fallbackAsset),
+      title,
+      alt: fallbackAsset.alt || fallbackAsset.title || title,
+      label: "Обложка не задана",
+      fallback: true,
+    };
+  }
+
+  const fallbackImage = getFirstRegistryImageSource();
+  if (fallbackImage) {
+    return {
+      kind: "direct",
+      url: fallbackImage.url,
+      title,
+      alt: title,
+      label: "Обложка не задана",
+      fallback: true,
+    };
+  }
+
+  return {
+    kind: "empty",
+    title,
+    label: "Обложка не задана",
+    message: state.loadedScenario ? "Обложка не задана." : "Загрузите дело, чтобы увидеть обложку.",
+  };
 }
 
 function getVisualAssetForParticipant(participant) {
@@ -1419,7 +1518,7 @@ function getVisualAssetForParticipant(participant) {
 
 function getVisualAssetsForDisplay() {
   return getVisualAssets().filter((asset) =>
-    ["participant_portrait", "scene", "object", "cover"].includes(asset.type)
+    ["participant_portrait", "scene", "object"].includes(asset.type) && !isCaseCoverAsset(asset)
   );
 }
 
@@ -1472,17 +1571,15 @@ function closeImageViewer() {
   renderImageViewer();
 }
 
-function openImageViewer(assetId) {
-  const asset = getVisualAssetById(assetId);
-  const url = asset ? getVisualAssetImageUrl(asset) : null;
-  if (!asset || !url) {
+function openImageViewerFromSource(source) {
+  if (!source || !source.url) {
     return;
   }
   state.imageViewer.open = true;
-  state.imageViewer.assetId = asset.id;
-  state.imageViewer.title = asset.title || asset.alt || "Иллюстрация";
-  state.imageViewer.alt = asset.alt || asset.title || "Иллюстрация";
-  state.imageViewer.url = url;
+  state.imageViewer.assetId = source.assetId || null;
+  state.imageViewer.title = source.title || source.alt || "Иллюстрация";
+  state.imageViewer.alt = source.alt || source.title || "Иллюстрация";
+  state.imageViewer.url = source.url;
   state.imageViewer.scale = 1;
   renderImageViewer();
   window.requestAnimationFrame(() => {
@@ -1490,6 +1587,51 @@ function openImageViewer(assetId) {
       dom.imageViewerCloseBtn.focus({ preventScroll: true });
     }
   });
+}
+
+function openImageViewer(assetId) {
+  const asset = getVisualAssetById(assetId);
+  const url = asset ? getVisualAssetImageUrl(asset) : null;
+  if (!asset || !url) {
+    return;
+  }
+  openImageViewerFromSource({
+    assetId: asset.id,
+    title: asset.title || asset.alt || "Иллюстрация",
+    alt: asset.alt || asset.title || "Иллюстрация",
+    url,
+  });
+}
+
+function renderCaseCoverMarkup(source) {
+  if (!source || !source.url) {
+    return `
+      <div class="case-cover-frame case-cover-placeholder">
+        <div class="case-cover-placeholder-inner">
+          <p class="case-cover-placeholder-title">${escapeHtml(source?.title || "Обложка дела")}</p>
+          <p>${escapeHtml(source?.message || "Обложка не задана.")}</p>
+        </div>
+      </div>
+    `;
+  }
+
+  const openAttrs = source.assetId
+    ? `data-case-cover-open data-case-cover-asset-id="${escapeHtml(source.assetId)}"`
+    : `data-case-cover-open data-case-cover-url="${escapeHtml(source.url)}"`;
+
+  return `
+    <button
+      type="button"
+      class="case-cover-trigger"
+      ${openAttrs}
+      aria-label="${escapeHtml(`Открыть крупно: ${source.title || source.alt || "Обложка дела"}`)}"
+    >
+      <div class="case-cover-frame">
+        <img src="${escapeHtml(source.url)}" alt="${escapeHtml(source.alt || source.title || "Обложка дела")}" />
+      </div>
+      <span class="case-cover-open-label">Открыть обложку крупно</span>
+    </button>
+  `;
 }
 
 function setImageViewerScale(nextScale) {
@@ -1503,8 +1645,7 @@ function setImageViewerScale(nextScale) {
 function renderLoadedPackageStatus(statusText, isError = false) {
   const source = state.loadedScenarioMeta;
   if (!source) {
-    dom.validationPanel.className = `status-panel ${isError ? "status-error" : "status-ok"}`;
-    dom.validationPanel.textContent = statusText || "Сценарий пока не загружен.";
+    renderValidation(statusText || "Сценарий пока не загружен.", isError);
     return;
   }
 
@@ -1552,8 +1693,16 @@ function renderLoadedPackageStatus(statusText, isError = false) {
     statusText ? `<p><strong>Статус:</strong> ${escapeStatusHtml(statusText)}</p>` : "",
   ].filter(Boolean);
 
-  dom.validationPanel.className = `status-panel ${isError ? "status-error" : "status-ok"}`;
-  dom.validationPanel.innerHTML = parts.join("");
+  dom.validationPanel.className = `status-panel package-details-panel ${isError ? "status-error" : "status-ok"}`;
+  if (typeof dom.validationPanel.open === "boolean") {
+    dom.validationPanel.open = false;
+  }
+  dom.validationPanel.innerHTML = `
+    <summary>${escapeHtml(statusText || "Техническая информация о пакете")}</summary>
+    <div class="package-details-body">
+      ${parts.join("")}
+    </div>
+  `;
 }
 
 function escapeHtml(value) {
@@ -1907,7 +2056,7 @@ function renderCaseIntro() {
 }
 
 function renderVisualAssets() {
-  const assets = getVisualAssetsForDisplay().filter((asset) => ["scene", "object", "cover"].includes(asset.type));
+  const assets = getVisualAssetsForDisplay();
   if (!assets.length) {
     dom.visualAssetsPanel.className = "visual-assets-grid empty-state";
     dom.visualAssetsPanel.textContent = "Иллюстрации дела появятся после загрузки пакета дела.";
@@ -2656,6 +2805,21 @@ document.addEventListener("keydown", (event) => {
 
 document.addEventListener("click", (event) => {
   const targetElement = event.target instanceof Element ? event.target : null;
+  const caseCoverTrigger = targetElement?.closest("[data-case-cover-open]");
+  if (caseCoverTrigger && state.loadedScenario) {
+    const assetId = caseCoverTrigger.getAttribute("data-case-cover-asset-id");
+    const coverUrl = caseCoverTrigger.getAttribute("data-case-cover-url");
+    if (assetId) {
+      openImageViewer(assetId);
+    } else if (coverUrl) {
+      openImageViewerFromSource({
+        title: state.loadedScenarioMeta?.title || "Обложка дела",
+        alt: state.loadedScenarioMeta?.title || "Обложка дела",
+        url: coverUrl,
+      });
+    }
+  }
+
   const visualAssetTrigger = targetElement?.closest("[data-visual-asset-id]");
   if (visualAssetTrigger && state.loadedScenario) {
     openImageViewer(visualAssetTrigger.getAttribute("data-visual-asset-id"));
