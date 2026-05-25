@@ -32,6 +32,12 @@ const state = {
     requestToken: 0,
     isBusy: false,
   },
+  scenarioLibrary: {
+    items: [],
+    statusMessage: "",
+    statusTone: "muted",
+    isLoading: false,
+  },
   imageViewer: {
     open: false,
     assetId: null,
@@ -48,6 +54,12 @@ const dom = {
   startScenarioBtn: document.querySelector("#start-scenario-btn"),
   restartScenarioBtn: document.querySelector("#restart-scenario-btn"),
   deleteActiveCaseBtn: document.querySelector("#delete-active-case-btn"),
+  saveScenarioLibraryBtn: document.querySelector("#save-scenario-library-btn"),
+  refreshScenarioLibraryBtn: document.querySelector("#refresh-scenario-library-btn"),
+  importScenarioLibraryBtn: document.querySelector("#import-scenario-library-btn"),
+  scenarioLibraryImportInput: document.querySelector("#scenario-library-import-input"),
+  scenarioLibraryStatusPanel: document.querySelector("#scenario-library-status-panel"),
+  scenarioLibraryList: document.querySelector("#scenario-library-list"),
   voiceToggleBtn: document.querySelector("#voice-toggle-btn"),
   stopVoiceBtn: document.querySelector("#stop-voice-btn"),
   voiceVolumeSlider: document.querySelector("#voice-volume-slider"),
@@ -556,6 +568,7 @@ function getSourceTypeLabel(sourceType) {
     zip: "ZIP",
     json_images: "JSON + изображения",
     json_files: "JSON + файлы",
+    library: "библиотека",
   };
   return labels[sourceType] || sourceType || "неизвестно";
 }
@@ -635,6 +648,7 @@ function serializeLoadedPackageMeta(meta) {
     unmatchedImageCount: meta.unmatchedImageCount || 0,
     warnings: Array.isArray(meta.warnings) ? meta.warnings : [],
     validationErrors: Array.isArray(meta.validationErrors) ? meta.validationErrors : [],
+    libraryId: meta.libraryId || "",
   };
 }
 
@@ -740,6 +754,7 @@ function buildActiveCaseRecordFromSnapshot(snapshot, meta) {
     selectedImageCount: meta?.selectedImageCount || 0,
     packageStatus,
     gameplayStarted: Boolean(snapshot.engine_state),
+    libraryId: meta?.libraryId || "",
   };
 }
 
@@ -764,6 +779,7 @@ function restoreSnapshotIntoState(snapshot) {
     unmatchedImageCount: meta.unmatchedImageCount || 0,
     warnings: Array.isArray(meta.warnings) ? meta.warnings : [],
     validationErrors: Array.isArray(meta.validationErrors) ? meta.validationErrors : [],
+    libraryId: meta.libraryId || "",
   };
   state.activeCaseRecord = snapshot.active_case_record || buildActiveCaseRecordFromSnapshot(snapshot, state.loadedScenarioMeta);
   state.activeCaseNotice = "Активное дело восстановлено из памяти браузера.";
@@ -930,6 +946,295 @@ function renderActiveCaseStatus() {
   `;
   if (dom.deleteActiveCaseBtn) {
     dom.deleteActiveCaseBtn.disabled = false;
+  }
+}
+
+function formatLibraryDate(value) {
+  if (!value) {
+    return "неизвестно";
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "неизвестно";
+  }
+  return date.toLocaleString("ru-RU");
+}
+
+function setScenarioLibraryStatus(message, tone = "muted") {
+  state.scenarioLibrary.statusMessage = message || "";
+  state.scenarioLibrary.statusTone = tone;
+  renderScenarioLibraryStatus();
+}
+
+function renderScenarioLibraryStatus() {
+  if (!dom.scenarioLibraryStatusPanel) {
+    return;
+  }
+  const toneClass =
+    state.scenarioLibrary.statusTone === "error"
+      ? "status-error"
+      : state.scenarioLibrary.statusTone === "ok"
+        ? "status-ok"
+        : state.scenarioLibrary.statusTone === "pending"
+          ? "status-pending"
+          : "";
+  dom.scenarioLibraryStatusPanel.className = `status-panel ${toneClass}`.trim();
+  dom.scenarioLibraryStatusPanel.textContent =
+    state.scenarioLibrary.statusMessage || "Сохраните текущее дело в библиотеку или импортируйте сохранённый ZIP.";
+}
+
+function renderScenarioLibraryList() {
+  if (!dom.scenarioLibraryList) {
+    return;
+  }
+  const items = Array.isArray(state.scenarioLibrary.items) ? state.scenarioLibrary.items : [];
+  if (!items.length) {
+    dom.scenarioLibraryList.className = "library-list empty-state";
+    dom.scenarioLibraryList.textContent = state.scenarioLibrary.isLoading
+      ? "Загружаем список сценариев..."
+      : "В библиотеке пока нет сохранённых сценариев.";
+    return;
+  }
+
+  dom.scenarioLibraryList.className = "library-list";
+  dom.scenarioLibraryList.innerHTML = items
+    .map(
+      (item) => `
+        <article class="library-item">
+          <div class="library-item-header">
+            <div class="library-item-meta">
+              <h3 class="library-item-title">${escapeHtml(item.title || "Без названия")}</h3>
+              <p class="library-item-subtitle">
+                ${escapeHtml(String(item.image_count || 0))} иллюстраций · обновлён ${escapeHtml(formatLibraryDate(item.updated_at))}
+              </p>
+            </div>
+            <div class="library-item-actions">
+              <button type="button" data-library-action="load" data-library-id="${escapeHtml(item.id)}">Загрузить</button>
+              <button type="button" data-library-action="export" data-library-id="${escapeHtml(item.id)}">Экспорт</button>
+              <button type="button" data-library-action="delete" data-library-id="${escapeHtml(item.id)}">Удалить</button>
+            </div>
+          </div>
+        </article>
+      `
+    )
+    .join("");
+}
+
+function collectLoadedScenarioImagesForLibrary() {
+  if (!state.loadedImageRegistry) {
+    return {};
+  }
+  return Object.fromEntries(state.loadedImageRegistry.byPath.entries());
+}
+
+function syncLoadedScenarioLibraryId(libraryId) {
+  if (state.loadedScenarioMeta) {
+    state.loadedScenarioMeta = {
+      ...state.loadedScenarioMeta,
+      libraryId: libraryId || "",
+    };
+  }
+  if (state.activeCaseRecord) {
+    state.activeCaseRecord = {
+      ...state.activeCaseRecord,
+      libraryId: libraryId || "",
+    };
+  }
+}
+
+function restoreScenarioFromLibraryResponse(data) {
+  stopCurrentTts({ nextStatusMessage: state.tts.enabled ? "Озвучка готова" : "Голос выключен", nextStatusTone: state.tts.enabled ? "ok" : "muted" });
+  closeImageViewer();
+  clearCurrentRuntimeState();
+  clearLoadedPackage();
+  state.loadedScenario = data.scenario;
+  state.loadedImageRegistry = createImageRegistryFromPackage(data.images);
+  state.loadedScenarioMeta = {
+    sourceLabel: "Сохранённый сценарий из библиотеки",
+    sourceType: "library",
+    packageType: "library",
+    fileName: "",
+    sizeBytes: null,
+    archiveName: "",
+    archiveSizeBytes: null,
+    title: data.metadata?.title || getScenarioTitle(data.scenario),
+    selectedImageCount: data.metadata?.image_count || Object.keys(data.images || {}).length,
+    matchedImageCount: data.metadata?.image_count || Object.keys(data.images || {}).length,
+    unmatchedImageCount: 0,
+    warnings: [],
+    validationErrors: [],
+    libraryId: data.metadata?.id || "",
+  };
+  state.activeCaseRecord = {
+    title: state.loadedScenarioMeta.title,
+    sourceType: state.loadedScenarioMeta.sourceType,
+    sourceLabel: state.loadedScenarioMeta.sourceLabel,
+    savedAt: new Date().toISOString(),
+    selectedImageCount: state.loadedScenarioMeta.selectedImageCount,
+    packageStatus: "loaded",
+    gameplayStarted: false,
+    libraryId: state.loadedScenarioMeta.libraryId,
+  };
+  state.activeCaseNotice = "Активное дело сохранено в памяти браузера.";
+  state.activeCaseError = "";
+  updateLoadedPackageButtons();
+  resetGamePanelsToEmptyState();
+  renderLoadedPackageStatus("Сохранённый сценарий из библиотеки загружен.");
+  renderActiveCaseStatus();
+  void queueActiveCasePersistence();
+}
+
+async function refreshScenarioLibraryList() {
+  state.scenarioLibrary.isLoading = true;
+  renderScenarioLibraryStatus();
+  renderScenarioLibraryList();
+  try {
+    const response = await fetch("/api/scenario-library/list", { cache: "no-store" });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error((data.errors || ["Не удалось получить список сценариев библиотеки."]).join("<br>"));
+    }
+    state.scenarioLibrary.items = Array.isArray(data.items) ? data.items : [];
+    setScenarioLibraryStatus(
+      state.scenarioLibrary.items.length
+        ? `В библиотеке сохранено сценариев: ${state.scenarioLibrary.items.length}.`
+        : "В библиотеке пока нет сохранённых сценариев.",
+      "ok"
+    );
+  } catch (error) {
+    state.scenarioLibrary.items = [];
+    setScenarioLibraryStatus(error.message || "Не удалось получить список сценариев библиотеки.", "error");
+  } finally {
+    state.scenarioLibrary.isLoading = false;
+    renderScenarioLibraryList();
+  }
+}
+
+async function saveCurrentScenarioToLibrary() {
+  if (!state.loadedScenario) {
+    setScenarioLibraryStatus("Нет активного дела для сохранения.", "error");
+    return;
+  }
+  const payload = {
+    scenario: state.loadedScenario,
+    images: collectLoadedScenarioImagesForLibrary(),
+    source_type: state.loadedScenarioMeta?.sourceType || "unknown",
+  };
+  const replaceId = state.loadedScenarioMeta?.libraryId || state.activeCaseRecord?.libraryId || "";
+  if (replaceId) {
+    payload.replace_id = replaceId;
+  }
+  try {
+    setScenarioLibraryStatus("Сохраняю сценарий в библиотеку...", "pending");
+    const result = await postJson("/api/scenario-library/save", payload);
+    syncLoadedScenarioLibraryId(result.saved_id);
+    if (state.activeCaseRecord) {
+      state.activeCaseRecord = {
+        ...state.activeCaseRecord,
+        libraryId: result.saved_id,
+      };
+    }
+    state.activeCaseNotice = "Активное дело сохранено в памяти браузера.";
+    state.activeCaseError = "";
+    renderActiveCaseStatus();
+    await refreshScenarioLibraryList();
+    await queueActiveCasePersistence();
+    setScenarioLibraryStatus(`Сценарий сохранён в библиотеку: ${result.title}.`, "ok");
+  } catch (error) {
+    setScenarioLibraryStatus(error.message || "Не удалось сохранить сценарий в библиотеку.", "error");
+  }
+}
+
+async function loadScenarioFromLibrary(libraryId) {
+  if (!libraryId) {
+    return;
+  }
+  const shouldConfirm = Boolean(state.loadedScenario || state.activeCaseRecord);
+  if (shouldConfirm) {
+    const confirmed = window.confirm("Заменить текущее активное дело сохранённым сценарием из библиотеки?");
+    if (!confirmed) {
+      return;
+    }
+  }
+  try {
+    setScenarioLibraryStatus("Загружаю сценарий из библиотеки...", "pending");
+    const response = await fetch(`/api/scenario-library/load?id=${encodeURIComponent(libraryId)}`, {
+      cache: "no-store",
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error((data.errors || ["Не удалось загрузить сценарий из библиотеки."]).join("<br>"));
+    }
+    restoreScenarioFromLibraryResponse(data);
+    setScenarioLibraryStatus(`Сценарий "${data.metadata?.title || "Без названия"}" загружен из библиотеки.`, "ok");
+  } catch (error) {
+    setScenarioLibraryStatus(error.message || "Не удалось загрузить сценарий из библиотеки.", "error");
+  }
+}
+
+async function exportScenarioFromLibrary(libraryId) {
+  if (!libraryId) {
+    return;
+  }
+  const url = `/api/scenario-library/export?id=${encodeURIComponent(libraryId)}`;
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "";
+  link.rel = "noopener";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setScenarioLibraryStatus("Экспорт сценария из библиотеки запущен.", "ok");
+}
+
+async function deleteScenarioFromLibrary(libraryId) {
+  if (!libraryId) {
+    return;
+  }
+  const confirmed = window.confirm("Удалить сохранённый сценарий из библиотеки?");
+  if (!confirmed) {
+    return;
+  }
+  try {
+    setScenarioLibraryStatus("Удаляю сценарий из библиотеки...", "pending");
+    const response = await fetch(`/api/scenario-library/delete?id=${encodeURIComponent(libraryId)}`, {
+      method: "DELETE",
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error((data.errors || ["Не удалось удалить сценарий из библиотеки."]).join("<br>"));
+    }
+    await refreshScenarioLibraryList();
+    setScenarioLibraryStatus("Сценарий удалён из библиотеки.", "ok");
+  } catch (error) {
+    setScenarioLibraryStatus(error.message || "Не удалось удалить сценарий из библиотеки.", "error");
+  }
+}
+
+async function importScenarioLibraryZip(file) {
+  if (!file) {
+    return;
+  }
+  try {
+    setScenarioLibraryStatus("Импортирую сценарий в библиотеку...", "pending");
+    const formData = new FormData();
+    formData.append("package", file, file.name);
+    const response = await fetch("/api/scenario-library/import", {
+      method: "POST",
+      body: formData,
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error((data.errors || ["Не удалось импортировать сценарий в библиотеку."]).join("<br>"));
+    }
+    await refreshScenarioLibraryList();
+    setScenarioLibraryStatus(`Сценарий импортирован в библиотеку: ${data.title}.`, "ok");
+  } catch (error) {
+    setScenarioLibraryStatus(error.message || "Не удалось импортировать сценарий в библиотеку.", "error");
+  } finally {
+    if (dom.scenarioLibraryImportInput) {
+      dom.scenarioLibraryImportInput.value = "";
+    }
   }
 }
 
@@ -2184,6 +2489,56 @@ dom.startScenarioBtn.addEventListener("click", async () => {
   }
 });
 
+if (dom.saveScenarioLibraryBtn) {
+  dom.saveScenarioLibraryBtn.addEventListener("click", () => {
+    void saveCurrentScenarioToLibrary();
+  });
+}
+
+if (dom.refreshScenarioLibraryBtn) {
+  dom.refreshScenarioLibraryBtn.addEventListener("click", () => {
+    void refreshScenarioLibraryList();
+  });
+}
+
+if (dom.importScenarioLibraryBtn && dom.scenarioLibraryImportInput) {
+  dom.importScenarioLibraryBtn.addEventListener("click", () => {
+    dom.scenarioLibraryImportInput.click();
+  });
+}
+
+if (dom.scenarioLibraryImportInput) {
+  dom.scenarioLibraryImportInput.addEventListener("change", () => {
+    const file = dom.scenarioLibraryImportInput.files?.[0] || null;
+    if (!file) {
+      return;
+    }
+    void importScenarioLibraryZip(file);
+  });
+}
+
+if (dom.scenarioLibraryList) {
+  dom.scenarioLibraryList.addEventListener("click", (event) => {
+    const targetElement = event.target instanceof Element ? event.target : null;
+    const actionButton = targetElement?.closest("[data-library-action]");
+    if (!actionButton) {
+      return;
+    }
+    const action = actionButton.getAttribute("data-library-action");
+    const libraryId = actionButton.getAttribute("data-library-id");
+    if (!action || !libraryId) {
+      return;
+    }
+    if (action === "load") {
+      void loadScenarioFromLibrary(libraryId);
+    } else if (action === "export") {
+      void exportScenarioFromLibrary(libraryId);
+    } else if (action === "delete") {
+      void deleteScenarioFromLibrary(libraryId);
+    }
+  });
+}
+
 if (dom.voiceToggleBtn) {
   dom.voiceToggleBtn.addEventListener("click", toggleVoiceSetting);
 }
@@ -2377,4 +2732,7 @@ async function bootstrapActiveCaseRestore() {
 renderActiveCaseStatus();
 updateLoadedPackageButtons();
 renderTtsControls();
+renderScenarioLibraryStatus();
+renderScenarioLibraryList();
 void bootstrapActiveCaseRestore();
+void refreshScenarioLibraryList();

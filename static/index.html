@@ -58,6 +58,30 @@
           <div id="validation-panel" class="status-panel">Сценарий пока не загружен.</div>
         </section>
 
+        <section class="panel library-panel">
+          <h2>Библиотека сценариев</h2>
+          <p class="panel-copy">
+            Сохраняйте понравившиеся дела, переносите их между серверами и загружайте обратно в игру без повторной подготовки.
+          </p>
+          <div class="button-row">
+            <button id="save-scenario-library-btn" type="button">Сохранить текущее дело</button>
+            <button id="refresh-scenario-library-btn" type="button">Обновить список</button>
+            <button id="import-scenario-library-btn" type="button">Импортировать сохранённый сценарий</button>
+            <input
+              id="scenario-library-import-input"
+              type="file"
+              accept=".zip,application/zip,application/x-zip-compressed"
+              hidden
+            />
+          </div>
+          <div id="scenario-library-status-panel" class="status-panel empty-state">
+            Список библиотечных сценариев пока не загружен.
+          </div>
+          <div id="scenario-library-list" class="library-list empty-state">
+            В библиотеке пока нет сохранённых сценариев.
+          </div>
+        </section>
+
         <section class="panel intro-panel">
           <h2>Введение в дело</h2>
           <div id="case-intro-panel" class="empty-state">Запустите сценарий, чтобы увидеть брифинг дела.</div>

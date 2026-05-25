@@ -100,6 +100,10 @@ h1 {
   grid-column: span 12;
 }
 
+.library-panel {
+  grid-column: span 12;
+}
+
 .media-panel {
   grid-column: span 12;
 }
@@ -278,6 +282,56 @@ button:disabled {
 .status-warnings ul {
   margin: 6px 0 0;
   padding-left: 18px;
+}
+
+.library-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.library-item {
+  display: grid;
+  gap: 10px;
+}
+
+.library-item-header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.library-item-meta {
+  display: grid;
+  gap: 4px;
+}
+
+.library-item-title {
+  margin: 0;
+  font-size: 1.04rem;
+  font-weight: 700;
+}
+
+.library-item-subtitle {
+  margin: 0;
+  color: var(--ink-soft);
+}
+
+.library-item-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.library-item-actions button {
+  margin-top: 0;
+}
+
+.library-empty {
+  color: var(--ink-soft);
+  font-style: italic;
 }
 
 .participant-grid,

@@ -17,7 +17,9 @@ from copy import deepcopy
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, quote, urlparse
+
+from app import scenario_library
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -1014,6 +1016,18 @@ class AppHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/demo-scenario":
             self.send_json(HTTPStatus.OK, load_demo_scenario())
             return
+        if parsed.path == "/api/scenario-library/list":
+            self.handle_scenario_library_list()
+            return
+        if parsed.path == "/api/scenario-library/load":
+            self.handle_scenario_library_load(parsed)
+            return
+        if parsed.path == "/api/scenario-library/export":
+            self.handle_scenario_library_export(parsed)
+            return
+        if parsed.path.startswith("/api/"):
+            self.send_json(HTTPStatus.NOT_FOUND, {"ok": False, "errors": ["Unknown endpoint"]})
+            return
         if parsed.path == "/":
             self.serve_static("index.html")
             return
@@ -1025,6 +1039,12 @@ class AppHandler(BaseHTTPRequestHandler):
             payload = self.read_json_body()
             errors = validate_scenario(payload)
             self.send_json(HTTPStatus.OK, {"ok": not errors, "errors": errors})
+            return
+        if parsed.path == "/api/scenario-library/save":
+            self.handle_scenario_library_save()
+            return
+        if parsed.path == "/api/scenario-library/import":
+            self.handle_scenario_library_import()
             return
         if parsed.path == "/api/start-scenario":
             payload = self.read_json_body()
@@ -1056,6 +1076,13 @@ class AppHandler(BaseHTTPRequestHandler):
             return
         self.send_json(HTTPStatus.NOT_FOUND, {"ok": False, "errors": ["Unknown endpoint"]})
 
+    def do_DELETE(self):
+        parsed = urlparse(self.path)
+        if parsed.path == "/api/scenario-library/delete":
+            self.handle_scenario_library_delete(parsed)
+            return
+        self.send_json(HTTPStatus.NOT_FOUND, {"ok": False, "errors": ["Unknown endpoint"]})
+
     def log_message(self, format, *args):
         return
 
@@ -1071,6 +1098,14 @@ class AppHandler(BaseHTTPRequestHandler):
         if length > max_bytes:
             raise ValueError("Запрос слишком большой для чернового MVP.")
         return self.rfile.read(length) if length else b""
+
+    def query_params(self, parsed):
+        return parse_qs(parsed.query or "", keep_blank_values=True)
+
+    def query_param(self, parsed, name):
+        params = self.query_params(parsed)
+        values = params.get(name) or []
+        return values[0] if values else ""
 
     def import_case_package(self):
         raw_body = self.read_raw_body()
@@ -1097,6 +1132,170 @@ class AppHandler(BaseHTTPRequestHandler):
             "package_summary": package_summary,
             "validation": result["validation"],
         }
+
+    def handle_scenario_library_save(self):
+        try:
+            payload = self.read_json_body()
+            scenario_payload = normalize_payload(payload.get("scenario"))
+            if not isinstance(scenario_payload, dict):
+                raise ValueError("Сценарий должен быть JSON-объектом.")
+            scenario = normalize_scenario(scenario_payload)
+            errors = validate_scenario(scenario)
+            if errors:
+                self.send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "errors": errors})
+                return
+            images = payload.get("images") or {}
+            source_type = payload.get("source_type") or "unknown"
+            replace_id = payload.get("replace_id") or None
+            result = scenario_library.save_saved_scenario(
+                scenario=scenario,
+                images=images,
+                source_type=source_type,
+                replace_id=replace_id,
+            )
+        except ValueError as error:
+            self.send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "errors": [str(error)]})
+            return
+        except json.JSONDecodeError:
+            self.send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "errors": ["Не удалось разобрать JSON запроса."]})
+            return
+        except Exception:
+            self.send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"ok": False, "errors": ["Не удалось сохранить сценарий в библиотеке."]})
+            return
+
+        self.send_json(
+            HTTPStatus.OK,
+            {
+                "ok": True,
+                "saved_id": result["saved_id"],
+                "title": result["title"],
+                "scenario_type": result["scenario_type"],
+                "image_count": result["image_count"],
+                "scenario_hash": result["scenario_hash"],
+                "created_at": result["created_at"],
+                "updated_at": result["updated_at"],
+            },
+        )
+
+    def handle_scenario_library_list(self):
+        try:
+            items = scenario_library.list_saved_scenarios()
+        except Exception:
+            self.send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"ok": False, "errors": ["Не удалось получить список сценариев библиотеки."]})
+            return
+        self.send_json(HTTPStatus.OK, {"ok": True, "items": items})
+
+    def handle_scenario_library_load(self, parsed):
+        saved_id = self.query_param(parsed, "id")
+        if not saved_id:
+            self.send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "errors": ["Не указан id сценария."]})
+            return
+        try:
+            loaded = scenario_library.load_saved_scenario(saved_id)
+        except ValueError as error:
+            self.send_json(HTTPStatus.NOT_FOUND, {"ok": False, "errors": [str(error)]})
+            return
+        except Exception:
+            self.send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"ok": False, "errors": ["Не удалось загрузить сценарий из библиотеки."]})
+            return
+        self.send_json(
+            HTTPStatus.OK,
+            {
+                "ok": True,
+                "scenario": loaded["scenario"],
+                "images": loaded["images"],
+                "metadata": loaded["metadata"],
+            },
+        )
+
+    def handle_scenario_library_delete(self, parsed):
+        saved_id = self.query_param(parsed, "id")
+        if not saved_id:
+            self.send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "errors": ["Не указан id сценария."]})
+            return
+        try:
+            scenario_library.delete_saved_scenario(saved_id)
+        except Exception:
+            self.send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"ok": False, "errors": ["Не удалось удалить сценарий из библиотеки."]})
+            return
+        self.send_json(HTTPStatus.OK, {"ok": True})
+
+    def handle_scenario_library_export(self, parsed):
+        saved_id = self.query_param(parsed, "id")
+        if not saved_id:
+            self.send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "errors": ["Не указан id сценария."]})
+            return
+        try:
+            archive_bytes, filename = scenario_library.export_saved_scenario_zip(saved_id)
+        except ValueError as error:
+            self.send_json(HTTPStatus.NOT_FOUND, {"ok": False, "errors": [str(error)]})
+            return
+        except Exception:
+            self.send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"ok": False, "errors": ["Не удалось экспортировать сценарий из библиотеки."]})
+            return
+
+        self.send_bytes(
+            HTTPStatus.OK,
+            archive_bytes,
+            "application/zip",
+            extra_headers={
+                "Content-Disposition": f'attachment; filename="scenario-library.zip"; filename*=UTF-8\'\'{quote(filename)}',
+            },
+        )
+
+    def handle_scenario_library_import(self):
+        try:
+            raw_body = self.read_raw_body(max_bytes=scenario_library.MAX_IMPORT_ZIP_BYTES)
+            parts = parse_multipart_form_data(self.headers, raw_body)
+            file_parts = [part for part in parts if part["filename"]]
+            if not file_parts:
+                raise ValueError("ZIP-пакет не был передан.")
+            if len(file_parts) > 1:
+                raise ValueError("Передайте только один ZIP-пакет библиотеки сценариев.")
+
+            file_part = file_parts[0]
+            filename = file_part["filename"]
+            if not filename.lower().endswith(".zip"):
+                raise ValueError("Пожалуйста, передайте ZIP-пакет библиотеки сценариев.")
+
+            parsed_zip = scenario_library.parse_saved_scenario_zip(file_part["content"], archive_name=filename)
+            scenario_payload = normalize_payload(parsed_zip["scenario"])
+            if not isinstance(scenario_payload, dict):
+                raise ValueError("Сценарий в ZIP-пакете должен быть JSON-объектом.")
+            scenario = normalize_scenario(scenario_payload)
+            errors = validate_scenario(scenario)
+            if errors:
+                self.send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "errors": errors})
+                return
+            import_meta = parsed_zip.get("library_record") or {}
+            result = scenario_library.save_saved_scenario(
+                scenario=scenario,
+                images=parsed_zip["images"],
+                source_type=import_meta.get("source_type") or parsed_zip["manifest"].get("source_type") or "library",
+            )
+        except ValueError as error:
+            self.send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "errors": [str(error)]})
+            return
+        except json.JSONDecodeError:
+            self.send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "errors": ["Не удалось разобрать ZIP-пакет библиотеки сценариев."]})
+            return
+        except Exception:
+            self.send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"ok": False, "errors": ["Не удалось импортировать сценарий в библиотеку."]})
+            return
+
+        self.send_json(
+            HTTPStatus.OK,
+            {
+                "ok": True,
+                "saved_id": result["saved_id"],
+                "title": result["title"],
+                "scenario_type": result["scenario_type"],
+                "image_count": result["image_count"],
+                "scenario_hash": result["scenario_hash"],
+                "created_at": result["created_at"],
+                "updated_at": result["updated_at"],
+            },
+        )
 
     def handle_tts_synthesize(self):
         try:
