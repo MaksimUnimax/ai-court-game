@@ -594,3 +594,170 @@ LLM должна избегать полностью обыденных дел.
 Файловые имена должны быть пригодны для сопоставления с загруженными изображениями в браузере.
 
 Это нужно, чтобы позже один загруженный пакет дела можно было разложить по нужным местам автоматически.
+
+## Schema compliance gate before delivery
+
+Before giving a scenario file to the user or packaging a case, validate schema compatibility against the current loader. Do not improvise field names, effect shapes, or visual asset types. If the loader expects an exact field name or exact type name, use that exact name.
+
+### Required top-level sections
+
+Required top-level sections are:
+
+- `metadata`
+- `case_intro`
+- `participants`
+- `relationships`
+- `evidence`
+- `dialogue_actions`
+- `verdicts`
+- `solution`
+
+`visual_assets` is allowed and recommended when the case includes cover art, portraits, scenes, or object illustrations.
+
+### visual_assets rules
+
+Use only supported visual asset types:
+
+- `cover`
+- `participant_portrait`
+- `scene`
+- `object`
+
+Do not use unsupported type names such as:
+
+- `case_cover`
+- `case_illustration`
+
+Each `visual_assets` item must define at least one of:
+
+- `target_type`
+- `placement`
+
+Best practice: define both when possible.
+
+Recommended mapping:
+
+- case cover: `type: "cover"`, `target_type: "case"`, `placement: "cover"`
+- participant portrait: `type: "participant_portrait"`, `target_type: "participant"`, `placement: "participant_card"`
+- case scene image: `type: "scene"`, `placement: "case_panel"`
+- object/evidence-style image: `type: "object"`, `placement: "case_panel"`
+
+### participants rules
+
+Each participant must include at minimum:
+
+- `id`
+- `name`
+- `role`
+- `position`
+- `relation_to_case`
+- `public_description`
+- `relationships`
+
+Optional richer fields such as `voice_direction`, `hidden_truth`, or other authoring fields may be added, but they never replace the required fields.
+
+### relationships rules
+
+Each relationship must include:
+
+- `id`
+- `from_participant_id`
+- `to_participant_id`
+- `label`
+- `description`
+
+`from_participant_id` and `to_participant_id` must reference existing participant ids.
+
+Do not replace these with aliases such as `from` or `to`.
+
+### evidence rules
+
+Use `inspection_text` as the detailed readable evidence body.
+
+Do not replace it with:
+
+- `detail`
+- `details`
+- any other alias
+
+Recommended minimum evidence fields:
+
+- `id`
+- `title`
+- `short_description`
+- `inspection_text`
+- `proves`
+
+If `effects` are used, `effects` must be an array of objects, not strings.
+
+Correct pattern example:
+
+JSON array:
+[
+  {
+    "type": "show_note",
+    "note": "..."
+  }
+]
+
+Incorrect pattern example:
+
+JSON array:
+[
+  "some text note"
+]
+
+### dialogue_actions rules
+
+Use `response_text` as the participant answer field.
+
+Do not replace it with:
+
+- `response`
+- `answer`
+- any other alias
+
+Each `dialogue_actions` item should include at minimum:
+
+- `id`
+- `participant_id`
+- `label`
+- `response_text`
+
+`participant_id` must reference an existing participant.
+
+If `effects` are used, `effects` must be an array of objects, not strings.
+
+### solution rules
+
+`solution` must include:
+
+- `explanation`
+
+Recommended additional fields:
+
+- `correct_verdict_id`
+- `truth`
+- `key_points`
+- `wrong_verdict_explanation`
+
+Do not ship a scenario where `solution.explanation` is missing.
+
+### Pre-delivery loader-compatibility checklist
+
+Before delivering any scenario JSON, verify all of the following:
+
+- all required participant fields are present
+- all `from_participant_id` and `to_participant_id` values point to existing participants
+- all evidence entries use `inspection_text`
+- all dialogue actions use `response_text`
+- all `effects` entries are objects, not strings
+- all `visual_assets` entries use only supported types
+- every visual asset defines `target_type` or `placement`
+- `solution.explanation` is present
+- the final JSON parses successfully
+- the final JSON is locally validated before delivery
+
+### Non-negotiable rule
+
+When creating scenario files for this project, follow the loader schema exactly. Do not rename fields for style, convenience, or readability. If the loader expects `response_text`, `inspection_text`, `cover`, `participant_portrait`, `scene`, or `object`, use those exact names.
