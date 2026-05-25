@@ -1,0 +1,37 @@
+captured_at_utc: "2026-05-25T03:04:44Z"
+sources:
+  - id: github_readme
+    title: Silero Models GitHub repository
+    url: https://github.com/snakers4/silero-models
+    captured_at_utc: "2026-05-25T03:04:44Z"
+    capture_status: captured
+    local_file_if_any: snapshots/github_readme_tts_excerpt.md
+    notes: Main repo README and installation overview for TTS usage paths.
+  - id: licensing_and_tiers
+    title: Licensing and Tiers wiki page
+    url: https://github.com/snakers4/silero-models/wiki/Licensing-and-Tiers
+    captured_at_utc: "2026-05-25T03:04:44Z"
+    capture_status: captured
+    local_file_if_any: snapshots/licensing_and_tiers_excerpt.md
+    notes: Source of the CE non-commercial warning and tier split.
+  - id: pytorch_hub_tts
+    title: Silero Text-To-Speech Models on PyTorch Hub
+    url: https://pytorch.org/hub/snakers4_silero-models_tts/
+    captured_at_utc: "2026-05-25T03:04:44Z"
+    capture_status: captured
+    local_file_if_any: snapshots/pytorch_hub_tts_excerpt.md
+    notes: Hub usage example and language/speaker summary.
+  - id: pypi_silero
+    title: silero package on PyPI
+    url: https://pypi.org/project/silero/
+    captured_at_utc: "2026-05-25T03:04:44Z"
+    capture_status: captured
+    local_file_if_any: snapshots/pypi_silero_excerpt.md
+    notes: Package description and installation/caching summary.
+  - id: examples_tts_notebook
+    title: Silero TTS example notebook
+    url: https://colab.research.google.com/github/snakers4/silero-models/blob/master/examples_tts.ipynb
+    captured_at_utc: "2026-05-25T03:04:44Z"
+    capture_status: recorded_only
+    local_file_if_any: null
+    notes: Link recorded for later reference; notebook content not mirrored in this capture.
