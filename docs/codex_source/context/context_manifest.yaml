@@ -2,8 +2,8 @@ version: 1.3
 project: ai-court-game
 file: docs/codex_source/context/current_dialogue_context.md
 append_only: true
-last_append_id: CTX-2026-05-25-010
-status: scenario_generation_baseline_appended
+last_append_id: CTX-2026-05-26-001
+status: playtesting_feedback_appended
 entries:
   - id: CTX-2026-05-25-009
     path: docs/codex_source/context/current_dialogue_context.md
@@ -13,3 +13,7 @@ entries:
     path: docs/codex_source/context/current_dialogue_context.md
     status: appended
     topic: product_foundation_runs
+  - id: CTX-2026-05-26-001
+    path: docs/codex_source/context/current_dialogue_context.md
+    status: appended
+    topic: playtesting_feedback_rules_update

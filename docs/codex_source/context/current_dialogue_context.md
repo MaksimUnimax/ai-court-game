@@ -272,3 +272,17 @@ LLM должна учитывать, что игрок-судья сидит в 
 - `AI_COURT_GAME_IMAGE_VIEWER_WHEEL_ZOOM_FIXED_BASE_20260525_01`: исправлен wheel zoom direction reversal через invariant base dimensions.
 
 Эти блоки считаются текущим baseline. Их не нужно повторять или переоткрывать без свежего proof о поломке.
+
+## CTX-2026-05-26-001 — Feedback from live playtesting on scenario rules
+
+Источник: live playtesting feedback in the current ChatGPT/user workflow.
+
+Проверка сценариев показала, что в документации ещё не были жёстко зафиксированы несколько правил, которые уже проявились в игре:
+
+- player-facing текст на сайте всё ещё был слишком коротким;
+- binary verdicts слишком легко решают multi-suspect cases;
+- evidence proof hints должны оставаться internal и не показываться игроку;
+- каждый visible participant должен иметь portrait;
+- будущие episodes должны варьировать genre, environment, mystery type и visual style.
+
+Этот блок нужен как append-only reference для следующей итерации canon/prompt rules.

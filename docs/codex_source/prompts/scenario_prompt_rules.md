@@ -75,8 +75,12 @@ STATUS: draft_1_appendable
 
 Уголовное дело должно использовать варианты вердикта:
 
+Если в деле один обвиняемый и вопрос только в том, виновен он или нет:
+
 - guilty;
 - not guilty.
+
+Если в деле несколько правдоподобных подозреваемых или ответственных сторон, вердикт должен предлагать выбор конкретного виновного или ответственного лица/стороны, а не только бинарное `guilty / not guilty`.
 
 Спор между двумя людьми должен использовать варианты вердикта:
 
@@ -594,6 +598,154 @@ LLM должна избегать полностью обыденных дел.
 Файловые имена должны быть пригодны для сопоставления с загруженными изображениями в браузере.
 
 Это нужно, чтобы позже один загруженный пакет дела можно было разложить по нужным местам автоматически.
+
+## Addendum — Player-facing evidence must not reveal proof hints
+
+Доказательства могут содержать внутренние авторские поля, которые объясняют, почему улика важна, что она доказывает, какое противоречие поддерживает или как помогает правильному вердикту.
+
+Эти поля полезны для валидации, ревью сценария и финальной логики решения.
+
+Но обычный player-facing UI не должен показывать эти внутренние proof hints во время игры.
+
+Не показывать блоки evidence с подписями или смыслами вроде:
+
+- `Что оно доказывает`
+- `Что доказывает`
+- `Proves`
+- `Why this matters`
+- `Key clue explanation`
+- `Hidden purpose`
+
+Игрок может видеть только наблюдаемые факты:
+
+- заголовок доказательства;
+- короткое читаемое описание;
+- подробный текст осмотра;
+- изображение, если оно есть;
+- audio/listen controls, если они есть;
+- нейтральные статусы;
+- нейтральные кнопки взаимодействия.
+
+Игрок не должен видеть отдельное объяснение, которое прямо подсказывает, к какому выводу прийти.
+
+Правильный player-facing pattern:
+
+- `В ране найдены частицы окисленной меди и старого лака. След широкий, дугообразный, с одним основным краем давления.`
+
+Неправильный player-facing pattern:
+
+- `Что оно доказывает: орудие убийства было старым медным механизмом, а не камертоном.`
+
+Вывод должен оставаться в final solution, verdict explanation, authoring notes, debug/review mode или validation reports, а не в обычном gameplay.
+
+Неприменимое правило: evidence должно показывать observable facts, а не решать себя само.
+
+## Addendum — One visible participant requires one participant portrait
+
+Если participant включён в `participants` и отображается в player-facing participant section, у него должен быть matching `participant_portrait` visual asset и реальный image file в package.
+
+Количество видимых participant cards и количество participant portraits должно совпадать.
+
+Для каждого видимого участника:
+
+- должен быть ровно один portrait asset с `type: "participant_portrait"`;
+- `target_type` должен быть `participant`;
+- `target_id` должен совпадать с `participant.id`;
+- `placement` должен быть `participant_card`;
+- `file` должен указывать на image, включённый в case package.
+
+Если у человека не должно быть портрета, не включайте его в player-facing `participants` list. Перенесите его в evidence text, final solution, background notes или internal authoring data.
+
+Неприменимое правило: каждый видимый участник должен иметь портрет.
+
+## Addendum — In-game case description must be substantial enough for the site
+
+Краткий chat summary и реальный in-game case description — это разные артефакты.
+
+Чат может получить короткое описание для предварительного approval перед полной генерацией.
+
+Сайт и player-facing scenario должны получить нормальный, полезный case intro.
+
+Он должен дать достаточно контекста, чтобы игрок понял дело до кликов по доказательствам и диалогам.
+
+In-game `case_intro` should include:
+
+- where and when the case happens;
+- what happened;
+- who is accused or what must be decided;
+- what public conflict or incident created the case;
+- why the case is strange or interesting;
+- what kinds of questions remain open;
+- enough context to make the first screen meaningful.
+
+Описание не должно быть крошечным тизером, который оставляет игрока в недоумении.
+
+Recommended size for full generated cases:
+
+- `summary`: short one or two sentence teaser;
+- `description`: several readable paragraphs or a substantial briefing;
+- `judge_goal`: clear player task;
+- optional `court_context` or `judge_briefing`: extra non-spoiler setup.
+
+The description must not reveal the solution or tell the player which clue matters.
+
+Non-negotiable rule: site description must orient the player, not merely advertise the case.
+
+## Addendum — Multi-suspect verdicts must not collapse into a binary choice
+
+If a case has several credible suspects or responsible parties, the verdict section must not offer only two choices such as:
+
+- `Егор Романов виновен`
+- `Егор Романов не виновен`
+
+That binary format is too easy when the real task is to identify who is responsible.
+
+For multi-suspect cases, verdict choices should ask the player to identify the responsible person, side, or outcome from a list of candidates.
+
+Recommended pattern for a multi-suspect criminal or sabotage case:
+
+- `Виновен Егор Романов`
+- `Виновна Алина Воронина`
+- `Виновен Кирилл Сазонов`
+- `Виновна Светлана Ким`
+- `Виновен Денис Яшин`
+
+or, if the legal framing requires acquittal plus true culprit:
+
+- `Егор Романов виновен`
+- `Егор Романов не виновен; ответственна Алина Воронина`
+- `Егор Романов не виновен; ответственен Кирилл Сазонов`
+- `Егор Романов не виновен; ответственна Светлана Ким`
+- `Егор Романов не виновен; ответственен Денис Яшин`
+
+There must still be exactly one correct verdict.
+
+The binary `guilty / not guilty` pattern is allowed only when the case truly has one accused and no meaningful alternative culprit choice.
+
+Non-negotiable rule: if the mystery is “who did it?”, the verdict UI must let the player choose “who”, not only “guilty or not guilty”.
+
+## Addendum — Scenarios as isolated episodes
+
+AI Court Game should read as an anthology of isolated detective-court episodes.
+
+Every new scenario should feel like a different episode, not the previous case with new props.
+
+Before generating a new scenario, choose a different combination of:
+
+- case type;
+- social world;
+- location;
+- genre tone;
+- visual style;
+- mystery mechanic;
+- central deduction type;
+- conflict scale.
+
+Do not repeat the same dramatic formula with only changed props.
+
+Visual style should also vary between episodes when possible. Do not reuse the same dark painterly noir look for every case.
+
+Non-negotiable rule: every new episode should feel like a different episode of an anthology series, not the same case in another costume.
 
 ## Schema compliance gate before delivery
 
