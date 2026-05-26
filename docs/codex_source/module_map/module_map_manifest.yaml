@@ -3,10 +3,14 @@ files:
   - path: docs/codex_source/module_map/module_map.md
     mode: append_only
     status: initial
-last_append_id: MM-2026-05-25-001
-status: current_baseline
+last_append_id: MODULE-MAP-2026-05-26-001
+status: runtime_scenario_docs_module_map_appended
 entries:
   - id: MM-2026-05-25-001
     path: docs/codex_source/module_map/module_map.md
     status: current_baseline
     topic: module_ownership_after_scenario_library_tts_viewer
+  - id: MODULE-MAP-2026-05-26-001
+    path: docs/codex_source/module_map/module_map.md
+    status: runtime_scenario_docs_module_map_appended
+    topic: runtime_scenario_and_docs_ownership

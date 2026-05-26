@@ -3,7 +3,7 @@ project: ai-court-game
 file: docs/codex_source/context/current_dialogue_context.md
 append_only: true
 last_append_id: CTX-2026-05-26-001
-status: playtesting_feedback_appended
+status: runtime_and_git_access_context_appended
 entries:
   - id: CTX-2026-05-25-009
     path: docs/codex_source/context/current_dialogue_context.md
@@ -17,3 +17,7 @@ entries:
     path: docs/codex_source/context/current_dialogue_context.md
     status: appended
     topic: playtesting_feedback_rules_update
+  - id: CTX-2026-05-26-002
+    path: docs/codex_source/context/current_dialogue_context.md
+    status: appended
+    topic: runtime_persistence_and_git_access_audit

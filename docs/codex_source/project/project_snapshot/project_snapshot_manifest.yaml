@@ -1,6 +1,12 @@
 version: 0.1
+last_snapshot_id: SNAPSHOT-2026-05-26-002
+status: stable_runtime_and_scenario_loop_snapshot
 snapshots:
   - id: SNAPSHOT-2026-05-25-001
     path: docs/codex_source/project/project_snapshot/PROJECT_SNAPSHOT.md
     status: current
     topic: scenario_generation_foundation
+  - id: SNAPSHOT-2026-05-26-002
+    path: docs/codex_source/project/project_snapshot/PROJECT_SNAPSHOT.md
+    status: stable_runtime_and_scenario_loop_snapshot
+    topic: runtime_stabilized_scenario_playtesting_loop

@@ -2,10 +2,14 @@ version: 0.3
 project: ai-court-game
 file: docs/codex_source/roadmap/roadmap.md
 append_only: true
-last_append_id: R007
-status: active_next
+last_append_id: R008
+status: runtime_stabilized_git_access_decision_pending_scenario_iteration_active
 entries:
   - id: R007
     path: docs/codex_source/roadmap/roadmap.md
     status: active_next
     topic: scenario_generation_and_quality_iteration
+  - id: R008
+    path: docs/codex_source/roadmap/roadmap.md
+    status: runtime_stabilized_git_access_decision_pending_scenario_iteration_active
+    topic: runtime_persistence_git_access_audit_and_iteration

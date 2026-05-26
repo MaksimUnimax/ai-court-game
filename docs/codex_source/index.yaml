@@ -70,9 +70,9 @@ project_docs:
   - path: "docs/codex_source/prompts/scenario_prompt_rules.md"
     status: "draft_1_appendable"
   - path: "docs/codex_source/roadmap/roadmap.md"
-    status: "placeholder"
+    status: "active_next"
   - path: "docs/codex_source/module_map/module_map.md"
-    status: "placeholder"
+    status: "current_baseline"
 
 current_state:
   product_tz_written: true

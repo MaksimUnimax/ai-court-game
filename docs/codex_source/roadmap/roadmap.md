@@ -193,3 +193,55 @@ Success criteria:
 - a scenario can be loaded, played, heard, examined visually, saved to library, exported, imported and replayed;
 - player can reach the correct verdict through dialogue, evidence, visual deduction and final explanation;
 - weaknesses discovered during playtesting become explicit canon updates.
+
+## Roadmap block R008 — Runtime persistence, GitHub access audit, and continued scenario-quality iteration
+
+Status: runtime_stabilized_git_access_decision_pending_scenario_iteration_active
+
+### Completed / proven
+
+- The live server upload `Failed to fetch` failure was diagnosed as a dead or unavailable live service, not a scenario package schema problem.
+- The Silero runtime failure was diagnosed as the server running under bare system Python.
+- `scripts/start_live_server.sh` was added to start the app with `.runtime/silero-venv/bin/python`.
+- A host systemd service `ai-court-game.service` was created to run the helper persistently.
+- Live root, scenario library API and TTS synthesize endpoint were proven working after the service fix.
+- GitHub push credential audit proved that Codex or server push capability comes from an SSH key configured on the server, not from credentials pasted in chat.
+
+### Current active block
+
+Continue scenario-generation and scenario-quality iteration under the updated canon.
+
+Next scenario-generation runs must:
+
+- generate one isolated episode at a time;
+- first provide a short approval description in chat;
+- after approval generate full scenario package;
+- include a substantial site description;
+- include candidate verdicts appropriate for the number of suspects;
+- include one portrait per visible participant;
+- include role-separated visual assets;
+- use a distinct genre, environment, mystery mechanic and visual style from recent episodes;
+- avoid player-facing proof hints and participant-card conclusions;
+- test in live UI;
+- convert playtesting failures into docs-only canon updates.
+
+### Pending security/admin decision
+
+Decide what to do with GitHub write access from the server:
+
+- keep current SSH write access;
+- reduce server access to read-only;
+- protect `main`;
+- require PR-only workflow;
+- or define another controlled workflow.
+
+No credential removal or GitHub access change should be performed without explicit user approval.
+
+### Not next
+
+- not uploaded audio;
+- not `audio_assets`;
+- not a new TTS provider;
+- not hardcoded case-specific logic;
+- not a broad UI redesign unless a fresh UI proof identifies a blocker;
+- not a GitHub credential change without explicit user approval.

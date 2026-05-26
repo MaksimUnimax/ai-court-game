@@ -29,3 +29,30 @@ Current implementation baseline:
 
 Current next step:
 Generate one full isolated scenario episode plus illustration prompts, test it in live UI, save a liked version to the scenario library, then update scenario canon with any new rules learned from playtesting.
+
+## SNAPSHOT-2026-05-26-002 — Stable live runtime and scenario playtesting loop
+
+AI Court Game now has a stabilized live runtime path and updated scenario-generation canon.
+
+Runtime snapshot:
+
+- live server runs through host `ai-court-game.service`
+- service starts the committed helper `scripts/start_live_server.sh`
+- helper runs Python from `.runtime/silero-venv`
+- Silero TTS is available through the live process
+- previous bare system Python start caused Silero runtime errors and must not be used as the live path
+
+Scenario-generation snapshot:
+
+- project is in anthology-style scenario generation and playtesting
+- each scenario is isolated
+- each scenario should vary environment, genre, mystery mechanic and visual style
+- player-facing text must show facts, not conclusions
+- substantial site descriptions and multi-suspect verdict choices are now required where applicable
+- every visible participant requires a portrait
+
+Security/admin snapshot:
+
+- server can push to GitHub through an existing SSH key configured in root SSH config
+- this was proven without printing secrets
+- future access policy is pending explicit user decision

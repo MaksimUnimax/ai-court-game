@@ -286,3 +286,82 @@ LLM должна учитывать, что игрок-судья сидит в 
 - будущие episodes должны варьировать genre, environment, mystery type и visual style.
 
 Этот блок нужен как append-only reference для следующей итерации canon/prompt rules.
+
+## CTX-2026-05-26-002 — Runtime persistence and GitHub push credential audit after scenario-rule update
+
+After `CTX-2026-05-26-001`, the project continued through operational stabilization and access audit work.
+
+### Proven runtime facts
+
+A live upload failure that appeared as browser `Failed to fetch` was diagnosed as a dead or unavailable live service rather than a scenario JSON or ZIP schema problem. The server was then restarted.
+
+A later Silero TTS failure showed that the server had been restarted with bare `python3 app/server.py`, which made Silero unavailable in the current Python process. The correct runtime is the local Silero virtual environment:
+
+- `/opt/ai-court-game/.runtime/silero-venv/bin/python app/server.py`
+
+Commit `41cb68abc25638b30d0eff9b3e2adf5ed2d032db` added:
+
+- `scripts/start_live_server.sh`
+
+The helper runs the AI Court Game server from the repo root through the Silero venv Python.
+
+A host-level systemd service was then created:
+
+- service name: `ai-court-game.service`
+- host unit path: `/etc/systemd/system/ai-court-game.service`
+- working directory: `/opt/ai-court-game`
+- execution path: `/opt/ai-court-game/scripts/start_live_server.sh`
+
+After this, the live server was systemd-owned, listened on `0.0.0.0:8000`, and Silero TTS returned `200 OK` with `Content-Type: audio/wav`.
+
+### Runtime rule
+
+Do not start the live server with bare:
+
+- `python3 app/server.py`
+
+Use the committed helper and the host service path. Bare system Python can make Silero unavailable even if the web UI still loads.
+
+### GitHub push credential audit
+
+A proof-only GitHub credential audit showed that Codex or server push access does not come from a key or token pasted in ChatGPT. It comes from server-side SSH configuration.
+
+Proven safe facts:
+
+- repo remote: `git@github.com-ai-court-game:MaksimUnimax/ai-court-game.git`
+- remote type: SSH
+- SSH alias: `github.com-ai-court-game`
+- key path used by the alias: `/root/.ssh/github_openscript_ed25519`
+- GitHub accepted the key and authenticated as `MaksimUnimax`
+- no Git credential helper was found
+- no GitHub token credential files were found
+- no `GITHUB`, `GH_`, `TOKEN`, or `PAT` environment variables were present
+- GitHub CLI was not installed
+- no secrets were printed
+
+### Security/admin stop-point
+
+Codex can push to GitHub because the server already has a configured SSH key with write-capable GitHub access. This is an operational or security decision point, not a code bug.
+
+The next security/admin decision should be explicit:
+
+- keep the server SSH key with write access;
+- replace it with read-only access;
+- protect `main` with GitHub rulesets or branch protection;
+- move to a PR-only workflow;
+- or use another controlled deployment flow.
+
+Do not remove keys or change GitHub access without explicit user approval.
+
+### Current scenario-generation stop-point
+
+Scenario-generation remains the active product block. Future scenarios must follow the latest canon:
+
+- substantial site `case_intro`, not only a tiny chat teaser;
+- no player-facing proof hints;
+- no visible participant-card deductions;
+- one portrait for every visible participant;
+- multi-suspect cases must let the player choose the responsible person or side rather than only binary guilty or not guilty;
+- each episode must vary genre, social world, mystery mechanic, environment and visual style;
+- all packages must remain JSON, ZIP, and library friendly;
+- Silero TTS reads scenario text and uploaded or generated audio assets remain forbidden.
